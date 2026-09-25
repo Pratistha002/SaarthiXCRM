@@ -1,0 +1,47 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - saarthix_crm_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+
+  backend:
+    build: ./backend
+    ports:
+      - "8082:8082"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/saarthix_crm
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      SPRING_MAIL_AUTH: "false"
+      SPRING_MAIL_STARTTLS: "false"
+      APP_MAIL_FROM: crm@saarthix.local
+      APP_MAIL_FROM_NAME: SaarthiX CRM
+      APP_MAIL_INBOX_URL: http://localhost:8025
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5175:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  saarthix_crm_data:

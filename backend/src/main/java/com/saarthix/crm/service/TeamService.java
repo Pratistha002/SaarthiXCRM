@@ -1,0 +1,151 @@
+package com.saarthix.crm.service;
+
+import com.saarthix.crm.domain.Catalog;
+import com.saarthix.crm.model.Lead;
+import com.saarthix.crm.model.User;
+import com.saarthix.crm.model.Workspace;
+import com.saarthix.crm.repo.LeadRepository;
+import com.saarthix.crm.repo.UserRepository;
+import com.saarthix.crm.repo.WorkspaceRepository;
+import com.saarthix.crm.security.Scope;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class TeamService {
+    private final UserRepository users;
+    private final WorkspaceRepository workspaces;
+    private final LeadRepository leads;
+    private final PasswordEncoder encoder;
+    private final NotificationService notifications;
+    private final Scope scope;
+
+    public TeamService(UserRepository users, WorkspaceRepository workspaces, LeadRepository leads,
+                       PasswordEncoder encoder, NotificationService notifications, Scope scope) {
+        this.users = users;
+        this.workspaces = workspaces;
+        this.leads = leads;
+        this.encoder = encoder;
+        this.notifications = notifications;
+        this.scope = scope;
+    }
+
+    public Map<String, Object> overview() {
+        User me = scope.user();
+        Workspace workspace = workspaces.findById(me.getWorkspaceId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found"));
+        List<Lead> all = leads.findByWorkspaceId(me.getWorkspaceId());
+        List<Map<String, Object>> members = new ArrayList<>();
+        for (User user : users.findByWorkspaceId(me.getWorkspaceId())) {
+            List<Lead> owned = all.stream().filter(l -> user.getId().equals(l.getOwnerId())).toList();
+            long open = owned.stream().filter(l -> Catalog.isOpen(l.getStage())).mapToLong(Lead::getValue).sum();
+            long won = owned.stream().filter(l -> "Won".equals(l.getStage())).mapToLong(Lead::getValue).sum();
+            long wonCount = owned.stream().filter(l -> "Won".equals(l.getStage())).count();
+            long lostCount = owned.stream().filter(l -> "Lost".equals(l.getStage())).count();
+            long decided = wonCount + lostCount;
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", user.getId());
+            row.put("name", user.getName());
+            row.put("email", user.getEmail());
+            row.put("role", user.getRole());
+            row.put("title", user.getTitle() == null ? "" : user.getTitle());
+            row.put("leads", owned.size());
+            row.put("openValue", open);
+            row.put("wonValue", won);
+            row.put("winRate", decided == 0 ? 0 : Math.round(wonCount * 100.0 / decided));
+            row.put("isYou", user.getId().equals(me.getId()));
+            members.add(row);
+        }
+        members.sort(Comparator.comparing(row -> String.valueOf(row.get("name")), String.CASE_INSENSITIVE_ORDER));
+        long unassigned = all.stream().filter(l -> l.getOwnerId() == null || l.getOwnerId().isBlank()).count();
+        return Map.of(
+                "workspace", Map.of("id", workspace.getId(), "name", workspace.getName(), "inviteCode", workspace.getInviteCode()),
+                "members", members,
+                "unassigned", unassigned,
+                "youAreAdmin", "ADMIN".equals(me.getRole()));
+    }
+
+    public Map<String, Object> addMember(MemberRequest request) {
+        User admin = scope.requireAdmin();
+        Catalog.require(request.role(), Catalog.ROLES, "Role");
+        String email = request.email().trim().toLowerCase();
+        if (users.existsByEmailIgnoreCase(email)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Someone already uses that email");
+        }
+        User user = new User();
+        user.setName(request.name().trim());
+        user.setEmail(email);
+        user.setPasswordHash(encoder.encode(request.password()));
+        user.setWorkspaceId(admin.getWorkspaceId());
+        user.setRole(request.role());
+        user.setTitle(request.title() == null ? "" : request.title().trim());
+        user.setCreatedAt(Instant.now());
+        users.save(user);
+        notifications.push(user.getId(), user.getWorkspaceId(), "welcome",
+                "Welcome to the team", admin.getName() + " added you to this workspace.", "/dashboard");
+        return Map.of("id", user.getId(), "name", user.getName(), "email", user.getEmail(), "role", user.getRole());
+    }
+
+    public Map<String, Object> changeRole(String id, RoleRequest request) {
+        User admin = scope.requireAdmin();
+        Catalog.require(request.role(), Catalog.ROLES, "Role");
+        User member = member(id, admin.getWorkspaceId());
+        if (member.getId().equals(admin.getId()) && !"ADMIN".equals(request.role()) && adminCount(admin.getWorkspaceId()) <= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promote another admin before changing your own role");
+        }
+        member.setRole(request.role());
+        users.save(member);
+        return Map.of("id", member.getId(), "role", member.getRole());
+    }
+
+    public Map<String, Object> removeMember(String id, String reassignTo) {
+        User admin = scope.requireAdmin();
+        User member = member(id, admin.getWorkspaceId());
+        if (member.getId().equals(admin.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot remove yourself");
+        }
+        User target = reassignTo == null || reassignTo.isBlank() ? admin : member(reassignTo, admin.getWorkspaceId());
+        List<Lead> owned = leads.findByWorkspaceIdAndOwnerId(admin.getWorkspaceId(), member.getId());
+        owned.forEach(lead -> {
+            lead.setOwnerId(target.getId());
+            lead.setOwnerName(target.getName());
+            leads.save(lead);
+        });
+        users.delete(member);
+        return Map.of("removed", member.getName(), "reassigned", owned.size(), "to", target.getName());
+    }
+
+    private User member(String id, String workspaceId) {
+        return users.findById(id)
+                .filter(user -> workspaceId.equals(user.getWorkspaceId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Teammate not found"));
+    }
+
+    private long adminCount(String workspaceId) {
+        return users.findByWorkspaceId(workspaceId).stream().filter(user -> "ADMIN".equals(user.getRole())).count();
+    }
+
+    public record MemberRequest(
+            @NotBlank(message = "Name is required") String name,
+            @NotBlank(message = "Email is required") @Email(message = "Enter a valid email") String email,
+            @NotBlank(message = "Password is required")
+            @Size(min = 8, message = "Password must be at least 8 characters") String password,
+            @NotBlank String role,
+            String title) {
+    }
+
+    public record RoleRequest(@NotBlank String role) {
+    }
+}
