@@ -20,6 +20,133 @@ const SORTS = [
   ['value_asc', 'Deal value low → high'],
 ];
 
+const COLUMNS = [
+  ['name', 'Lead Name', (lead) => lead.name],
+  ['leadType', 'Lead Type', (lead) => lead.leadType],
+  ['company', 'Company / Institute', (lead) => (lead.leadType === 'Student' ? '' : lead.company)],
+  ['contactPerson', 'Contact Person', (lead) => lead.contactPerson],
+  ['collegeName', 'College Name', (lead) => lead.collegeName],
+  ['course', 'Course', (lead) => lead.course],
+  ['branch', 'Branch', (lead) => lead.branch],
+  ['email', 'Email', (lead) => lead.email],
+  ['phone', 'Phone', (lead) => lead.phone],
+  ['mobile', 'Mobile', (lead) => lead.mobile],
+  ['website', 'Website', (lead) => lead.website],
+  ['stage', 'Lead Status', (lead) => lead.stage],
+  ['priority', 'Priority', (lead) => lead.priority],
+  ['source', 'Lead Source', (lead) => lead.source],
+  ['value', 'Deal Value', (lead) => money(lead.value)],
+  ['rating', 'Rating', (lead) => lead.rating],
+  ['employees', 'No. of Employees', (lead) => lead.employees],
+  ['annualRevenue', 'Annual Revenue', (lead) => (lead.annualRevenue != null ? money(lead.annualRevenue) : '')],
+  ['owner', 'Lead Owner', (lead) => lead.ownerName],
+  ['city', 'City', (lead) => lead.city],
+  ['state', 'State', (lead) => lead.state],
+  ['country', 'Country', (lead) => lead.country],
+  ['tags', 'Tags', (lead) => (lead.tags || []).join(', ')],
+  ['score', 'Lead Score', (lead) => lead.score],
+  ['created', 'Created', (lead) => ago(lead.createdAt)],
+  ['updated', 'Updated', (lead) => ago(lead.updatedAt)],
+];
+
+const DEFAULT_COLUMNS = ['name', 'leadType', 'email', 'mobile', 'stage', 'value', 'owner', 'updated'];
+
+function loadColumns() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sx_leads_columns'));
+    const valid = Array.isArray(saved) ? saved.filter((key) => COLUMNS.some(([id]) => id === key)) : [];
+    return valid.length ? valid : DEFAULT_COLUMNS;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
+function ColumnPicker({ columns, onChange }) {
+  const [open, setOpen] = useState(false);
+  const toggle = (key) => onChange(columns.includes(key)
+    ? columns.filter((item) => item !== key)
+    : COLUMNS.map(([id]) => id).filter((id) => id === key || columns.includes(id)));
+  const move = (key, step) => {
+    const index = columns.indexOf(key);
+    const target = index + step;
+    if (target < 0 || target >= columns.length) return;
+    const next = [...columns];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+  return (
+    <div className="relative">
+      <button type="button" className="btn-ghost !rounded-xl !py-2.5" onClick={() => setOpen(!open)}>⚙ Columns <span className="rounded-full bg-slate-100 px-1.5 text-xs">{columns.length}</span></button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl bg-white p-4 shadow-xl ring-1 ring-slate-200">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Shown · use arrows to reorder</p>
+          <ul className="mb-3 space-y-1">
+            {columns.map((key, index) => (
+              <li key={key} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked disabled={columns.length === 1} onChange={() => toggle(key)} />
+                  {COLUMNS.find(([id]) => id === key)[1]}
+                </label>
+                <span className="flex gap-1 text-slate-400">
+                  <button type="button" disabled={index === 0} className="px-1 hover:text-slate-800 disabled:opacity-30" onClick={() => move(key, -1)} aria-label="Move up">↑</button>
+                  <button type="button" disabled={index === columns.length - 1} className="px-1 hover:text-slate-800 disabled:opacity-30" onClick={() => move(key, 1)} aria-label="Move down">↓</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Available</p>
+          <div className="grid max-h-48 grid-cols-2 gap-x-2 overflow-y-auto">
+            {COLUMNS.filter(([id]) => !columns.includes(id)).map(([id, label]) => (
+              <label key={id} className="flex items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-slate-50">
+                <input type="checkbox" checked={false} onChange={() => toggle(id)} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-between border-t border-slate-100 pt-3 text-sm">
+            <button type="button" className="text-slate-500 hover:text-slate-800" onClick={() => onChange(DEFAULT_COLUMNS)}>Reset</button>
+            <button type="button" className="font-semibold text-blue-600" onClick={() => setOpen(false)}>Done</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomTable({ leads, columns, selected, allSelected, onToggle, onToggleAll, onOpen }) {
+  const shown = columns.map((key) => COLUMNS.find(([id]) => id === key));
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-[11px] uppercase tracking-wide text-slate-400">
+          <tr>
+            <th className="w-8 py-2"><input type="checkbox" checked={allSelected} onChange={onToggleAll} /></th>
+            {shown.map(([id, label]) => <th key={id} className="whitespace-nowrap py-2 pr-4 font-medium">{label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((lead) => (
+            <tr key={lead.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(lead)}>
+              <td className="py-3" onClick={(event) => event.stopPropagation()}>
+                <input type="checkbox" checked={selected.includes(lead.id)} onChange={() => onToggle(lead.id)} />
+              </td>
+              {shown.map(([id, , read]) => {
+                const value = read(lead);
+                return (
+                  <td key={id} className={cx('whitespace-nowrap py-3 pr-4', id === 'name' ? 'font-medium text-blue-700' : 'text-slate-600')}>
+                    {value === 0 ? 0 : value || <span className="text-slate-300">—</span>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {leads.length === 0 && <p className="py-12 text-center text-sm text-slate-400">No leads match these filters.</p>}
+    </div>
+  );
+}
+
 export default function Leads() {
   const { user } = useAuth();
   const { members } = useTeam();
@@ -35,7 +162,8 @@ export default function Leads() {
   const [type, setType] = useState('All');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sort, setSort] = useState('updated_desc');
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(() => localStorage.getItem('sx_leads_view') || 'list');
+  const [columns, setColumns] = useState(loadColumns);
   const [selected, setSelected] = useState([]);
   const [editor, setEditor] = useState(null);
   const [emailFor, setEmailFor] = useState(null);
@@ -80,6 +208,13 @@ export default function Leads() {
   const leads = pack?.leads || [];
   const allSelected = leads.length > 0 && selected.length === leads.length;
   const activeFilters = [priority !== 'All priority', source !== 'All sources', owner !== 'All owners'].filter(Boolean).length;
+
+  useEffect(() => { localStorage.setItem('sx_leads_view', view); }, [view]);
+
+  function saveColumns(next) {
+    setColumns(next);
+    localStorage.setItem('sx_leads_columns', JSON.stringify(next));
+  }
 
   function open(lead) {
     navigate(`/leads/${lead.id}`, { state: { ids: leads.map((item) => item.id) } });
@@ -199,11 +334,13 @@ export default function Leads() {
               </div>
             )}
           </div>
-          <div className="ml-auto flex items-center gap-2 text-sm text-slate-400">
-            <span>{leads.length} of {summary?.total || 0}</span>
-            <button type="button" className={cx('grid h-9 w-9 place-items-center rounded-lg', view === 'list' ? 'bg-slate-100 text-slate-800' : '')} onClick={() => setView('list')}>☰</button>
-            <button type="button" className={cx('grid h-9 w-9 place-items-center rounded-lg', view === 'grid' ? 'bg-slate-100 text-slate-800' : '')} onClick={() => setView('grid')}>▦</button>
-          </div>
+          <select className="field !w-44" value={view} onChange={(event) => setView(event.target.value)} aria-label="View">
+            <option value="list">Table view</option>
+            <option value="grid">Tile view</option>
+            <option value="custom">Custom list view</option>
+          </select>
+          {view === 'custom' && <ColumnPicker columns={columns} onChange={saveColumns} />}
+          <span className="ml-auto text-sm text-slate-400">{leads.length} of {summary?.total || 0}</span>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {chips.map(([label, count]) => (
@@ -275,20 +412,36 @@ export default function Leads() {
             </table>
             {leads.length === 0 && <p className="py-12 text-center text-sm text-slate-400">No leads match these filters.</p>}
           </div>
+        ) : view === 'custom' ? (
+          <CustomTable
+            leads={leads}
+            columns={columns}
+            selected={selected}
+            allSelected={allSelected}
+            onToggle={toggle}
+            onToggleAll={() => setSelected(allSelected ? [] : leads.map((lead) => lead.id))}
+            onOpen={open}
+          />
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {leads.map((lead) => (
-              <button key={lead.id} type="button" className="rounded-2xl border border-slate-100 p-4 text-left hover:border-blue-200" onClick={() => open(lead)}>
-                <div className="flex items-center gap-3">
+              <button key={lead.id} type="button" className="rounded-2xl border border-slate-100 p-4 text-left transition hover:border-blue-200 hover:shadow-sm" onClick={() => open(lead)}>
+                <div className="flex items-start gap-3">
                   <Avatar name={lead.name} size="sm" />
-                  <div>
-                    <p className="font-medium">{lead.name}</p>
-                    <p className="text-xs text-slate-400">{lead.company}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{lead.name}</p>
+                    <p className="truncate text-xs text-slate-400">{lead.company && lead.company !== lead.name ? lead.company : lead.email || '—'}</p>
                   </div>
+                  {lead.leadType && <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">{lead.leadType}</span>}
                 </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="font-semibold">{money(lead.value)}</span>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <StagePill value={lead.stage} />
+                  <PriorityPill value={lead.priority} />
+                  {lead.source && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{lead.source}</span>}
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                  <span className="text-sm font-semibold text-slate-800">{money(lead.value)}</span>
+                  <span>{lead.ownerName || 'Unassigned'} · {ago(lead.updatedAt)}</span>
                 </div>
               </button>
             ))}
