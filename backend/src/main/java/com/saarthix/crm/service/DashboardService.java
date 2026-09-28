@@ -49,10 +49,10 @@ public class DashboardService {
         LocalDate today = LocalDate.now();
 
         long pipelineValue = all.stream().mapToLong(Lead::getValue).sum();
-        long wonValue = all.stream().filter(l -> "Won".equals(l.getStage())).mapToLong(Lead::getValue).sum();
+        long wonValue = all.stream().filter(l -> Catalog.isWon(l.getStage())).mapToLong(Lead::getValue).sum();
         long forecast = all.stream().mapToLong(l -> Catalog.weighted(l.getValue(), l.getStage())).sum();
-        long wonCount = all.stream().filter(l -> "Won".equals(l.getStage())).count();
-        long lostCount = all.stream().filter(l -> "Lost".equals(l.getStage())).count();
+        long wonCount = all.stream().filter(l -> Catalog.isWon(l.getStage())).count();
+        long lostCount = all.stream().filter(l -> Catalog.isExit(l.getStage())).count();
         long decided = wonCount + lostCount;
         double conversion = decided == 0 ? 0 : (wonCount * 100.0 / decided);
 
@@ -100,9 +100,9 @@ public class DashboardService {
         Map<String, Long> wonReasons = new LinkedHashMap<>();
         Map<String, Long> lostReasons = new LinkedHashMap<>();
         Catalog.WON_REASONS.forEach(reason -> wonReasons.put(reason,
-                all.stream().filter(l -> "Won".equals(l.getStage()) && reason.equals(l.getCloseReason())).count()));
-        Catalog.LOST_REASONS.forEach(reason -> lostReasons.put(reason,
-                all.stream().filter(l -> "Lost".equals(l.getStage()) && reason.equals(l.getCloseReason())).count()));
+                all.stream().filter(l -> Catalog.isWon(l.getStage()) && reason.equals(l.getCloseReason())).count()));
+        Catalog.EXIT_REASONS.forEach(reason -> lostReasons.put(reason,
+                all.stream().filter(l -> Catalog.isExit(l.getStage()) && reason.equals(l.getCloseReason())).count()));
 
         LocalDate start = LocalDate.of(today.getYear(), 1, 1);
         String range = start.getDayOfMonth() + " " + start.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
@@ -206,7 +206,7 @@ public class DashboardService {
         for (int i = 5; i >= 0; i--) {
             YearMonth month = end.minusMonths(i);
             long value = all.stream()
-                    .filter(l -> "Won".equals(l.getStage()) && l.getClosedAt() != null)
+                    .filter(l -> Catalog.isWon(l.getStage()) && l.getClosedAt() != null)
                     .filter(l -> YearMonth.from(l.getClosedAt().atZone(ZoneOffset.UTC)).equals(month))
                     .mapToLong(Lead::getValue)
                     .sum();
@@ -217,15 +217,15 @@ public class DashboardService {
 
     private long wonBetween(List<Lead> all, Instant from, Instant to) {
         return all.stream()
-                .filter(l -> "Won".equals(l.getStage()) && l.getClosedAt() != null)
+                .filter(l -> Catalog.isWon(l.getStage()) && l.getClosedAt() != null)
                 .filter(l -> !l.getClosedAt().isBefore(from) && l.getClosedAt().isBefore(to))
                 .mapToLong(Lead::getValue)
                 .sum();
     }
 
     private double rate(List<Lead> all, Instant from, Instant to) {
-        long won = all.stream().filter(l -> "Won".equals(l.getStage()) && inWindow(l.getClosedAt(), from, to)).count();
-        long lost = all.stream().filter(l -> "Lost".equals(l.getStage()) && inWindow(l.getClosedAt(), from, to)).count();
+        long won = all.stream().filter(l -> Catalog.isWon(l.getStage()) && inWindow(l.getClosedAt(), from, to)).count();
+        long lost = all.stream().filter(l -> Catalog.isExit(l.getStage()) && inWindow(l.getClosedAt(), from, to)).count();
         long decided = won + lost;
         return decided == 0 ? 0 : won * 100.0 / decided;
     }

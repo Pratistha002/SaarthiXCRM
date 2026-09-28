@@ -10,7 +10,7 @@ const NAV = [
 ];
 
 const FEATURES = [
-  ['Visual pipeline', 'Drag deals across New, Qualified, Proposal, Won and Lost without losing the story.'],
+  ['Visual pipeline', 'Move leads from New to Converted, and park Junk, Not Interested or Lost ones without losing the story.'],
   ['Lead activity', 'See every movement, owner and deal value in one activity table your team can act on.'],
   ['Follow-ups', 'Upcoming tasks sit on the dashboard so nothing slips past the next call.'],
   ['Shared team workspace', 'Invite teammates, assign owners, and keep one pipeline everyone can see.'],

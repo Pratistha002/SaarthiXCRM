@@ -383,7 +383,7 @@ export default function Dashboard() {
               <Expand />
             </div>
             <p className="mt-3 text-xs text-slate-400">Closed-won total</p>
-            <p className="text-xs text-slate-400">Total Won</p>
+            <p className="text-xs text-slate-400">Total Converted</p>
             <p className="mt-1 text-[32px] font-semibold tracking-tight">{money(view.totalWon)}</p>
             <Spark series={view.revenueSeries || []} />
             <div className="mt-4 flex gap-2">

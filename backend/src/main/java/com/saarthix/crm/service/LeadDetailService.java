@@ -1,5 +1,6 @@
 package com.saarthix.crm.service;
 
+import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.model.Activity;
 import com.saarthix.crm.model.Attachment;
 import com.saarthix.crm.model.Contact;
@@ -67,12 +68,23 @@ public class LeadDetailService {
         body.put("notes", leadNotes);
         body.put("openActivities", leadTasks.stream().filter(t -> !"Completed".equals(t.getStatus())).toList());
         body.put("closedActivities", leadTasks.stream().filter(t -> "Completed".equals(t.getStatus())).toList());
+        body.put("calls", timeline.stream().filter(a -> "call".equals(a.getType())).toList());
         body.put("emails", timeline.stream().filter(a -> "email".equals(a.getType())).toList());
         body.put("attachments", attachments.findByLeadIdOrderByCreatedAtDesc(id));
         body.put("contact", lead.getConvertedContactId() == null ? null
                 : contacts.findById(lead.getConvertedContactId()).orElse(null));
         body.put("timeline", timeline);
         return body;
+    }
+
+    public Map<String, Object> activitiesFor(String id) {
+        Map<String, Object> all = related(id);
+        return Map.of("open", all.get("openActivities"), "closed", all.get("closedActivities"), "calls", all.get("calls"));
+    }
+
+    public List<Activity> timeline(String id) {
+        leadService.get(id);
+        return activities.forLead(id);
     }
 
     public Lead tags(String id, TagsRequest request) {
@@ -105,11 +117,22 @@ public class LeadDetailService {
         contact.setTags(tags);
         contact.setCreatedAt(Instant.now());
         contacts.save(contact);
+        String previousStage = lead.getStage();
         lead.setConvertedContactId(contact.getId());
         lead.setConvertedAt(Instant.now());
         lead.setUpdatedAt(Instant.now());
+        if (!Catalog.isWon(previousStage)) {
+            lead.setStage(Catalog.CONVERTED);
+            lead.setCloseReason("");
+            lead.setCloseNote("");
+            lead.setClosedAt(Instant.now());
+        }
         leads.save(lead);
         activities.log(lead, scope.user(), "converted", "Converted to contact", person + " is now in Contacts.");
+        if (!Catalog.isWon(previousStage)) {
+            activities.log(lead, scope.user(), "stage", "Moved to " + Catalog.CONVERTED,
+                    previousStage + " → " + Catalog.CONVERTED);
+        }
         return Map.of("lead", leadService.get(id), "contact", contact);
     }
 

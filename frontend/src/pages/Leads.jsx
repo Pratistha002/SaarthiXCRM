@@ -44,7 +44,6 @@ const COLUMNS = [
   ['state', 'State', (lead) => lead.state],
   ['country', 'Country', (lead) => lead.country],
   ['tags', 'Tags', (lead) => (lead.tags || []).join(', ')],
-  ['score', 'Lead Score', (lead) => lead.score],
   ['created', 'Created', (lead) => ago(lead.createdAt)],
   ['updated', 'Updated', (lead) => ago(lead.updatedAt)],
 ];
@@ -279,7 +278,7 @@ export default function Leads() {
             ['Total leads', summary.total],
             ['Open pipeline', compact(summary.openPipeline)],
             ['Weighted forecast', compact(summary.forecast)],
-            ['Won value', compact(summary.wonValue)],
+            ['Converted value', compact(summary.wonValue)],
             ['Avg deal size', money(summary.avgDeal)],
           ].map(([label, value]) => (
             <div key={label} className="card flex items-center gap-3 !p-4">

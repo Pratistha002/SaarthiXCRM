@@ -22,4 +22,5 @@ public class Activity {
     private String actorId;
     private String actorName;
     private Instant createdAt;
+    private CallLog call;
 }

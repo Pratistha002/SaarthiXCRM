@@ -113,7 +113,7 @@ export default function Team() {
                 <th className="py-2 font-medium">Role</th>
                 <th className="py-2 font-medium">Leads</th>
                 <th className="py-2 font-medium">Open value</th>
-                <th className="py-2 font-medium">Won value</th>
+                <th className="py-2 font-medium">Converted value</th>
                 <th className="py-2 font-medium">Win rate</th>
                 <th />
               </tr>

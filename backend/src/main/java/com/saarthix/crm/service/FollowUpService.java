@@ -15,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -78,16 +80,28 @@ public class FollowUpService {
         apply(task, request);
         tasks.save(task);
         notifyAssignee(task, true);
-        linkedLead(task.getLeadId()).ifPresent(lead ->
-                activities.log(lead, scope.user(), "task", "Follow-up added", task.getTitle() + " due " + task.getDueDate()));
+        linkedLead(task.getLeadId()).ifPresent(lead -> {
+            activities.log(lead, scope.user(), "task", "Follow-up added", task.getTitle() + " due " + dueText(task));
+            syncNextFollowUp(lead.getId());
+        });
         return task;
+    }
+
+    public FollowUp createForLead(String leadId, TaskRequest request) {
+        linkedLead(leadId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        return create(new TaskRequest(request.title(), request.details(), request.dueDate(), request.priority(),
+                request.status(), leadId, request.assigneeId(), request.assigneeName(),
+                request.type(), request.dueTime(), request.dueAt(), request.reminder()));
     }
 
     public FollowUp update(String id, TaskRequest request) {
         FollowUp task = owned(id);
+        String previousLead = task.getLeadId();
         apply(task, request);
         tasks.save(task);
         notifyAssignee(task, false);
+        syncNextFollowUp(previousLead);
+        if (!java.util.Objects.equals(previousLead, task.getLeadId())) syncNextFollowUp(task.getLeadId());
         return task;
     }
 
@@ -95,11 +109,46 @@ public class FollowUpService {
         Catalog.require(request.status(), Catalog.TASK_STATUSES, "Status");
         FollowUp task = owned(id);
         task.setStatus(request.status());
-        return tasks.save(task);
+        tasks.save(task);
+        syncNextFollowUp(task.getLeadId());
+        return task;
     }
 
     public void delete(String id) {
-        tasks.delete(owned(id));
+        FollowUp task = owned(id);
+        tasks.delete(task);
+        syncNextFollowUp(task.getLeadId());
+    }
+
+    /** Keeps Lead.nextFollowUpAt equal to the earliest open follow-up on that lead. */
+    public void syncNextFollowUp(String leadId) {
+        linkedLead(leadId).ifPresent(lead -> {
+            Instant next = tasks.findByWorkspaceIdAndLeadId(lead.getWorkspaceId(), lead.getId()).stream()
+                    .filter(task -> !"Completed".equals(task.getStatus()))
+                    .map(FollowUpService::dueInstant)
+                    .filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null);
+            if (!java.util.Objects.equals(next, lead.getNextFollowUpAt())) {
+                lead.setNextFollowUpAt(next);
+                leads.save(lead);
+            }
+        });
+    }
+
+    private static Instant dueInstant(FollowUp task) {
+        if (task.getDueAt() != null) return task.getDueAt();
+        if (task.getDueDate() == null || task.getDueDate().isBlank()) return null;
+        try {
+            return LocalDate.parse(task.getDueDate()).atStartOfDay(ZoneId.systemDefault()).toInstant();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static String dueText(FollowUp task) {
+        return task.getDueTime() == null || task.getDueTime().isBlank()
+                ? task.getDueDate() : task.getDueDate() + " " + task.getDueTime();
     }
 
     public static boolean overdue(FollowUp task, LocalDate today) {
@@ -117,8 +166,17 @@ public class FollowUpService {
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid due date");
         }
+        if (request.type() != null && !request.type().isBlank()) {
+            Catalog.require(request.type(), Catalog.TASK_TYPES, "Follow-up type");
+        }
+        if (request.reminder() != null && !request.reminder().isBlank()
+                && !Catalog.REMINDER_MINUTES.containsKey(request.reminder())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Reminder must be one of: " + String.join(", ", Catalog.REMINDER_MINUTES.keySet()));
+        }
         User assignee = resolveAssignee(request.assigneeId());
         Lead lead = linkedLead(request.leadId()).orElse(null);
+        applySchedule(task, request);
         task.setTitle(request.title().trim());
         task.setDetails(request.details() == null ? "" : request.details().trim());
         task.setDueDate(request.dueDate());
@@ -129,6 +187,43 @@ public class FollowUpService {
         task.setAssigneeId(assignee.getId());
         task.setAssigneeName(assignee.getName());
         task.setRemindedOn(null);
+    }
+
+    /**
+     * Time, type and reminder are optional so the plain Follow-ups form keeps working. When that form moves
+     * the date without sending a time, the old time no longer applies and is cleared.
+     */
+    private void applySchedule(FollowUp task, TaskRequest request) {
+        boolean dateChanged = task.getDueDate() != null && !task.getDueDate().equals(request.dueDate());
+        if (request.type() != null) task.setType(request.type().isBlank() ? null : request.type());
+        if (request.dueTime() != null && !request.dueTime().isBlank()) {
+            try {
+                LocalTime.parse(request.dueTime());
+            } catch (Exception ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid time");
+            }
+            task.setDueTime(request.dueTime());
+            task.setDueAt(parseInstant(request.dueAt()));
+        } else if (dateChanged || request.dueTime() != null) {
+            task.setDueTime(null);
+            task.setDueAt(null);
+        }
+        if (request.reminder() != null) task.setReminder(request.reminder().isBlank() ? "None" : request.reminder());
+        int minutes = Catalog.REMINDER_MINUTES.getOrDefault(task.getReminder() == null ? "None" : task.getReminder(), 0);
+        Instant remindAt = minutes > 0 && task.getDueAt() != null ? task.getDueAt().minusSeconds(minutes * 60L) : null;
+        if (!java.util.Objects.equals(remindAt, task.getRemindAt())) {
+            task.setRemindAt(remindAt);
+            task.setReminderSentAt(null);
+        }
+    }
+
+    private static Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Instant.parse(value);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid date and time");
+        }
     }
 
     private User resolveAssignee(String assigneeId) {
@@ -166,7 +261,11 @@ public class FollowUpService {
             @NotBlank String status,
             String leadId,
             String assigneeId,
-            String assigneeName) {
+            String assigneeName,
+            String type,
+            String dueTime,
+            String dueAt,
+            String reminder) {
     }
 
     public record StatusRequest(@NotBlank String status) {

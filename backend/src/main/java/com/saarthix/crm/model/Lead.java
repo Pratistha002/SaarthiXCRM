@@ -61,6 +61,8 @@ public class Lead {
     private Instant createdAt;
     private Instant updatedAt;
     private Instant closedAt;
+    private Instant lastContactedAt;
+    private Instant nextFollowUpAt;
 
     @Transient
     private Integer score;
