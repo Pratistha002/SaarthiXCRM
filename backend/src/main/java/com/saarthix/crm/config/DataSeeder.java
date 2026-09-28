@@ -1,5 +1,6 @@
 package com.saarthix.crm.config;
 
+import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.model.Workspace;
 import com.saarthix.crm.repo.UserRepository;
@@ -26,21 +27,35 @@ public class DataSeeder {
                 created.setCreatedAt(Instant.now());
                 return workspaces.save(created);
             });
-            upsert(users, encoder, workspace, "Alex Morgan", "alex@saarthix.com", "ADMIN", "Head of Sales");
-            upsert(users, encoder, workspace, "Priya Shah", "priya@saarthix.com", "MANAGER", "Sales Manager");
-            upsert(users, encoder, workspace, "Rohan Mehta", "rohan@saarthix.com", "REP", "Account Executive");
+            upsert(users, encoder, workspace, "Alex Morgan", "alex@saarthix.com", "HEAD_OF_SALES", "Head of Sales", "Demo@123", false);
+            upsert(users, encoder, workspace, "Priya Shah", "priya@saarthix.com", "SALES_EXECUTIVE", "Sales Executive", "Demo@123", false);
+            upsert(users, encoder, workspace, "Rohan Mehta", "rohan@saarthix.com", "SALES_EXECUTIVE", "Sales Executive", "Demo@123", false);
+            upsert(users, encoder, workspace, "ADMIN", "ADMIN", "HEAD_OF_SALES", "Platform Admin", "Pratistha@221716", true);
+            users.findAll().forEach(user -> {
+                String next = Catalog.normalizeRole(user.getRole());
+                if (!next.equals(user.getRole())) {
+                    user.setRole(next);
+                    users.save(user);
+                }
+            });
+            users.findByEmailIgnoreCase("alex@saarthix.com").ifPresent(user -> {
+                if (user.isPlatformAdmin()) {
+                    user.setPlatformAdmin(false);
+                    users.save(user);
+                }
+            });
         };
     }
 
     private User upsert(UserRepository users, PasswordEncoder encoder, Workspace workspace,
-                        String name, String email, String role, String title) {
+                        String name, String email, String role, String title, String password, boolean platformAdmin) {
         return users.findByEmailIgnoreCase(email).map(existing -> {
             boolean dirty = false;
             if (existing.getWorkspaceId() == null || existing.getWorkspaceId().isBlank()) {
                 existing.setWorkspaceId(workspace.getId());
                 dirty = true;
             }
-            if (existing.getRole() == null || existing.getRole().isBlank()) {
+            if (existing.getRole() == null || !role.equals(existing.getRole())) {
                 existing.setRole(role);
                 dirty = true;
             }
@@ -48,8 +63,16 @@ public class DataSeeder {
                 existing.setTitle(title);
                 dirty = true;
             }
-            if ("alex@saarthix.com".equalsIgnoreCase(email) && !existing.isPlatformAdmin()) {
-                existing.setPlatformAdmin(true);
+            if (existing.getName() == null || !name.equals(existing.getName())) {
+                existing.setName(name);
+                dirty = true;
+            }
+            if (existing.isPlatformAdmin() != platformAdmin) {
+                existing.setPlatformAdmin(platformAdmin);
+                dirty = true;
+            }
+            if (platformAdmin) {
+                existing.setPasswordHash(encoder.encode(password));
                 dirty = true;
             }
             return dirty ? users.save(existing) : existing;
@@ -57,13 +80,13 @@ public class DataSeeder {
             User created = new User();
             created.setName(name);
             created.setEmail(email);
-            created.setPasswordHash(encoder.encode("Demo@123"));
+            created.setPasswordHash(encoder.encode(password));
             created.setCompany("SaarthiX");
             created.setWorkspaceId(workspace.getId());
             created.setRole(role);
             created.setTitle(title);
             created.setCreatedAt(Instant.now());
-            created.setPlatformAdmin("alex@saarthix.com".equalsIgnoreCase(email));
+            created.setPlatformAdmin(platformAdmin);
             return users.save(created);
         });
     }

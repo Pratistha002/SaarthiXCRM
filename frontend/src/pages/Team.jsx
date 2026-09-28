@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { useAuth } from '../auth';
-import { ROLES, compact, cx } from '../lib';
-import { Avatar, Banner, Field, Modal, RolePill } from '../ui';
+import { ROLES, compact, cx, isHeadOfSales, roleLabel } from '../lib';
+import { Avatar, Banner, Field, Modal, RolePicker, RolePill } from '../ui';
 
-const EMPTY = { name: '', email: '', password: '', role: 'REP', title: '' };
+const EMPTY = { name: '', email: '', password: '', role: 'SALES_EXECUTIVE', title: '' };
 
 export default function Team() {
-  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
@@ -55,7 +53,7 @@ export default function Team() {
   if (error && !data) return <div className="card text-sm text-rose-600">{error}</div>;
   if (!data) return <div className="py-20 text-center text-slate-400">Loading your team…</div>;
 
-  const isAdmin = data.youAreAdmin;
+  const canManage = data.youAreAdmin;
 
   return (
     <div>
@@ -65,8 +63,8 @@ export default function Team() {
           <p className="text-sm text-slate-500">{data.workspace.name} · everyone here shares one pipeline.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isAdmin && <button type="button" className="btn-ghost" onClick={runReminders}>Run reminder sweep</button>}
-          {isAdmin && <button type="button" className="btn" onClick={() => setAdding(true)}>+ Add teammate</button>}
+          {canManage && <button type="button" className="btn-ghost" onClick={runReminders}>Run reminder sweep</button>}
+          {canManage && <button type="button" className="btn" onClick={() => setAdding(true)}>+ Add teammate</button>}
         </div>
       </div>
 
@@ -84,17 +82,27 @@ export default function Team() {
         </div>
         <div className="card !p-4">
           <p className="text-xs text-slate-400">Invite code</p>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="font-mono text-lg font-semibold">{data.workspace.inviteCode}</span>
-            <button type="button" className="text-xs font-medium text-blue-600" onClick={copyCode}>{copied ? 'Copied' : 'Copy'}</button>
-          </div>
+          {canManage ? (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-mono text-lg font-semibold">{data.workspace.inviteCode}</span>
+              <button type="button" className="text-xs font-medium text-blue-600" onClick={copyCode}>{copied ? 'Copied' : 'Copy'}</button>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">Ask Head of Sales to add people.</p>
+          )}
         </div>
       </div>
 
-      <Banner tone="info">
-        Share the invite code with a teammate. They create their own account at the sign-up page, enter the code, and
-        land in this workspace with the same leads, contacts, notes and follow-ups.
-      </Banner>
+      {canManage ? (
+        <Banner tone="info">
+          Share the invite code with a teammate. They create their own account at the sign-up page, enter the code, and
+          land in this workspace with the same leads, contacts, notes and follow-ups.
+        </Banner>
+      ) : (
+        <Banner tone="info">
+          Sales executives can view the team. Only Head of Sales can add, edit or remove teammates.
+        </Banner>
+      )}
 
       <div className="card mt-4">
         <div className="overflow-x-auto">
@@ -126,13 +134,13 @@ export default function Team() {
                     </div>
                   </td>
                   <td>
-                    {isAdmin ? (
+                    {canManage ? (
                       <select
                         className="field w-auto !py-1.5 text-xs"
-                        value={member.role}
+                        value={isHeadOfSales(member.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE'}
                         onChange={(event) => changeRole(member, event.target.value)}
                       >
-                        {ROLES.map((role) => <option key={role} value={role}>{role === 'ADMIN' ? 'Admin' : role === 'MANAGER' ? 'Manager' : 'Rep'}</option>)}
+                        {ROLES.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
                       </select>
                     ) : <RolePill value={member.role} />}
                   </td>
@@ -146,7 +154,7 @@ export default function Team() {
                     </span>
                   </td>
                   <td className="text-right">
-                    {isAdmin && !member.isYou && (
+                    {canManage && !member.isYou && (
                       <button type="button" className="text-xs text-rose-500" onClick={() => setRemoving(member)}>Remove</button>
                     )}
                   </td>
@@ -158,7 +166,7 @@ export default function Team() {
       </div>
 
       <p className="mt-4 text-xs text-slate-400">
-        Admins manage teammates and roles. Managers and reps work the same shared pipeline.
+        Head of Sales can add and remove teammates. Sales executives can see the team but cannot edit it.
       </p>
 
       {adding && <AddMember onClose={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
@@ -197,14 +205,12 @@ function AddMember({ onClose, onSaved }) {
       <form className="space-y-3" onSubmit={submit}>
         <Field label="Name"><input className="field" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
         <Field label="Work email"><input className="field" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
-        <Field label="Job title"><input className="field" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Account Executive" /></Field>
+        <Field label="Job title"><input className="field" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Sales Executive" /></Field>
         <Field label="Temporary password" hint="Share it with them. They can change their name and title after signing in.">
           <input className="field" type="text" minLength={8} required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
         </Field>
-        <Field label="Role" hint="Admins can add and remove teammates.">
-          <select className="field" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
-            {ROLES.map((role) => <option key={role} value={role}>{role === 'ADMIN' ? 'Admin' : role === 'MANAGER' ? 'Manager' : 'Rep'}</option>)}
-          </select>
+        <Field label="Role" hint="Head of Sales can add and remove teammates.">
+          <RolePicker value={form.role} onChange={(role) => setForm({ ...form, role })} />
         </Field>
         {error && <p className="text-sm text-rose-600">{error}</p>}
         <div className="flex justify-end gap-2">

@@ -3,7 +3,7 @@ export const PRIORITIES = ['High', 'Medium', 'Low'];
 export const SOURCES = ['Cold Outreach', 'Event', 'Social', 'Website', 'Other', 'Referral'];
 export const PURPOSES = ['Follow-up', 'Introduction', 'Proposal', 'Check-in', 'Closing'];
 export const TONES = ['Formal', 'Friendly', 'Concise', 'Persuasive'];
-export const ROLES = ['ADMIN', 'MANAGER', 'REP'];
+export const ROLES = ['HEAD_OF_SALES', 'SALES_EXECUTIVE'];
 export const WON_REASONS = ['Price', 'Product fit', 'Relationship', 'Speed', 'Referral', 'Other'];
 export const LOST_REASONS = ['Price', 'Competitor', 'Timing', 'No sponsor', 'No budget', 'Other'];
 export const WEIGHTS = { New: 15, Qualified: 40, Proposal: 70, Won: 100, Lost: 0 };
@@ -142,7 +142,17 @@ export function weekDays(anchor = new Date()) {
 }
 
 export function roleLabel(role) {
-  if (role === 'ADMIN') return 'Admin';
-  if (role === 'MANAGER') return 'Manager';
-  return 'Rep';
+  if (role === 'HEAD_OF_SALES' || role === 'ADMIN' || role === 'MANAGER') return 'Head of Sales';
+  return 'Sales Executive';
+}
+
+export function isHeadOfSales(role) {
+  return role === 'HEAD_OF_SALES' || role === 'ADMIN' || role === 'MANAGER';
+}
+
+export function isPlatformAdmin(user) {
+  if (!user) return false;
+  if (user.platformAdmin) return true;
+  const key = String(user.email || user.name || '').trim().toUpperCase();
+  return key === 'ADMIN';
 }

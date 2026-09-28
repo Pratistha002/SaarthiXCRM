@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
-import { ago, cx } from './lib';
-import { Field, Logo, Modal } from './ui';
+import { ago, cx, isHeadOfSales, isPlatformAdmin } from './lib';
+import { Field, Logo, Modal, RolePicker } from './ui';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -44,7 +44,12 @@ export default function Shell({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [profile, setProfile] = useState({ name: user?.name || '', company: user?.company || '', title: user?.title || '' });
+  const [profile, setProfile] = useState({
+    name: user?.name || '',
+    company: user?.company || '',
+    title: user?.title || '',
+    role: isHeadOfSales(user?.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE',
+  });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -138,11 +143,21 @@ export default function Shell({ children }) {
                       {unread > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
                     </button>
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/notes'); }}>Notes</button>
-                    {user?.platformAdmin && (
+                    {isPlatformAdmin(user) && (
                       <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/admin'); }}>Admin console</button>
                     )}
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/team'); }}>Team</button>
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setEditing(true); }}>Edit profile</button>
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => {
+                      setMenuOpen(false);
+                      setError('');
+                      setProfile({
+                        name: user?.name || '',
+                        company: user?.company || '',
+                        title: user?.title || '',
+                        role: isHeadOfSales(user?.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE',
+                      });
+                      setEditing(true);
+                    }}>Edit profile</button>
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
                   </div>
                 </div>
@@ -216,11 +231,14 @@ export default function Shell({ children }) {
       </div>
 
       {editing && (
-        <Modal title="Your profile" subtitle="This name appears across the workspace." onClose={() => setEditing(false)}>
+        <Modal title="Your profile" subtitle="Choose whether you are Head of Sales or a Sales Executive." onClose={() => setEditing(false)}>
           <form className="space-y-4" onSubmit={saveProfile}>
             <Field label="Name"><input className="field" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></Field>
             <Field label="Company"><input className="field" value={profile.company} onChange={(event) => setProfile({ ...profile, company: event.target.value })} /></Field>
             <Field label="Title"><input className="field" value={profile.title || ''} onChange={(event) => setProfile({ ...profile, title: event.target.value })} /></Field>
+            <Field label="Role" hint="Head of Sales can add and remove teammates. Sales executives cannot.">
+              <RolePicker value={isHeadOfSales(profile.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE'} onChange={(role) => setProfile({ ...profile, role })} />
+            </Field>
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>Cancel</button>

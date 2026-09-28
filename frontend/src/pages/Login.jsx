@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { isPlatformAdmin } from '../lib';
 import { Logo } from '../ui';
+
+function afterSignIn(user, next) {
+  if (isPlatformAdmin(user) || next === '/admin') return '/admin';
+  return '/dashboard';
+}
 
 const POINTS = [
   ['Visual pipeline with drag-and-drop stages', 'M4 7h16M4 12h10M4 17h13'],
@@ -21,7 +27,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to={next === '/admin' ? '/admin' : '/dashboard'} replace />;
+  if (user) return <Navigate to={afterSignIn(user, next)} replace />;
 
   async function submit(event) {
     event.preventDefault();
@@ -30,24 +36,7 @@ export default function Login() {
     try {
       const auth = await api('/api/auth/login', { method: 'POST', body: { email, password } });
       save(auth);
-      navigate(next === '/admin' ? '/admin' : '/dashboard', { state: { welcome: true } });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function demo() {
-    setBusy(true);
-    setError('');
-    try {
-      const auth = await api('/api/auth/login', {
-        method: 'POST',
-        body: { email: 'alex@saarthix.com', password: 'Demo@123' },
-      });
-      save(auth);
-      navigate(next === '/admin' ? '/admin' : '/dashboard', { state: { welcome: true } });
+      navigate(afterSignIn(auth.user, next), { state: { welcome: true } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -85,12 +74,12 @@ export default function Login() {
           <div className="mb-8 lg:hidden"><Link to="/"><Logo /></Link></div>
           <h2 className="text-[28px] font-semibold tracking-tight">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">Sign in to your SaarthiX workspace.</p>
-          <label className="mt-8 block text-sm font-medium">Email
+          <label className="mt-8 block text-sm font-medium">Username or email
             <span className="relative mt-2 block">
               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="6" width="16" height="12" rx="2" /><path d="M4 8l8 6 8-6" /></svg>
               </span>
-              <input className="pill-input" type="email" required placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} />
+              <input className="pill-input" type="text" required autoComplete="username" placeholder="ADMIN or you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} />
             </span>
           </label>
           <label className="mt-4 block text-sm font-medium">Password
@@ -104,10 +93,6 @@ export default function Login() {
           </label>
           {error && <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
           <button className="btn mt-6 h-12 w-full text-[15px]" disabled={busy} type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
-          <button type="button" className="btn-ghost mt-3 h-12 w-full" disabled={busy} onClick={demo}>Try the demo workspace</button>
-          <p className="mt-3 text-center text-xs text-slate-400">
-            Demo logins, password <span className="font-medium text-slate-600">Demo@123</span>: alex@saarthix.com (admin), priya@saarthix.com (manager), rohan@saarthix.com (rep).
-          </p>
           <p className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account? <Link className="font-semibold text-blue-700" to="/register">Create one</Link>
           </p>

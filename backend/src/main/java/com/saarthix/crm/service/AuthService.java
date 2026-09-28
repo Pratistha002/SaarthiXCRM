@@ -1,5 +1,6 @@
 package com.saarthix.crm.service;
 
+import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.model.LoginEvent;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.model.Workspace;
@@ -56,11 +57,15 @@ public class AuthService {
         user.setTitle(request.title() == null ? "" : request.title().trim());
         user.setCreatedAt(Instant.now());
         String invite = request.inviteCode() == null ? "" : request.inviteCode().trim();
+        if (request.role() == null || request.role().isBlank()) {
+            user.setRole(invite.isBlank() ? Catalog.HEAD_OF_SALES : Catalog.SALES_EXECUTIVE);
+        } else {
+            user.setRole(Catalog.requireUserRole(request.role()));
+        }
         if (!invite.isBlank()) {
             Workspace workspace = workspaces.findByInviteCodeIgnoreCase(invite)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "That invite code is not valid"));
             user.setWorkspaceId(workspace.getId());
-            user.setRole("REP");
             if (user.getCompany() == null || user.getCompany().isBlank()) {
                 user.setCompany(workspace.getName());
             }
@@ -69,7 +74,6 @@ public class AuthService {
                     ? user.getName() + " workspace"
                     : request.company().trim());
             user.setWorkspaceId(workspace.getId());
-            user.setRole("ADMIN");
         }
         users.save(user);
         recordLogin(user);
@@ -78,9 +82,9 @@ public class AuthService {
 
     public Map<String, Object> login(LoginRequest request) {
         User user = users.findByEmailIgnoreCase(request.email().trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
         if (!encoder.matches(request.password(), user.getPasswordHash())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
         recordLogin(user);
         reminders.runForUser(user);
@@ -101,6 +105,15 @@ public class AuthService {
         }
         if (request.title() != null) {
             user.setTitle(request.title().trim());
+        }
+        if (request.role() != null && !request.role().isBlank()) {
+            String next = Catalog.requireUserRole(request.role());
+            if (Catalog.isHeadOfSales(user.getRole()) && !Catalog.isHeadOfSales(next)
+                    && headCount(user.getWorkspaceId()) <= 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Promote another Head of Sales before changing your own role");
+            }
+            user.setRole(next);
         }
         users.save(user);
         return profile(user);
@@ -142,7 +155,7 @@ public class AuthService {
         body.put("email", user.getEmail());
         body.put("company", user.getCompany() == null ? "" : user.getCompany());
         body.put("title", user.getTitle() == null ? "" : user.getTitle());
-        body.put("role", user.getRole() == null ? "REP" : user.getRole());
+        body.put("role", Catalog.normalizeRole(user.getRole()));
         body.put("workspaceId", user.getWorkspaceId() == null ? "" : user.getWorkspaceId());
         body.put("workspaceName", workspaces.findById(user.getWorkspaceId() == null ? "" : user.getWorkspaceId())
                 .map(Workspace::getName).orElse(""));
@@ -168,7 +181,7 @@ public class AuthService {
     }
 
     public record LoginRequest(
-            @NotBlank(message = "Email is required") @Email(message = "Enter a valid email") String email,
+            @NotBlank(message = "Username is required") String email,
             @NotBlank(message = "Password is required") String password) {
     }
 
@@ -179,9 +192,19 @@ public class AuthService {
             @Size(min = 8, message = "Password must be at least 8 characters") String password,
             String company,
             String title,
-            String inviteCode) {
+            String inviteCode,
+            String role) {
     }
 
-    public record ProfileRequest(String name, String company, String title) {
+    public record ProfileRequest(String name, String company, String title, String role) {
+    }
+
+    private long headCount(String workspaceId) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            return 0;
+        }
+        return users.findByWorkspaceId(workspaceId).stream()
+                .filter(member -> Catalog.isHeadOfSales(member.getRole()))
+                .count();
     }
 }
