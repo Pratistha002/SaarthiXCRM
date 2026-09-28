@@ -5,7 +5,7 @@ export function Logo({ light = false, compact = false }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className={cx(
-        'grid h-9 w-9 place-items-center rounded-xl shadow-sm',
+        'grid h-9 w-9 place-items-center rounded-full shadow-sm',
         light ? 'bg-white/15 ring-1 ring-white/30' : 'bg-gradient-to-br from-blue-500 to-blue-700',
       )}>
         <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
