@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { colorFor, cx, initials, priorityStyle, stageStyle } from './lib';
+import { colorFor, cx, initials, priorityStyle, roleLabel, ROLES, stageStyle } from './lib';
 
 export function Logo({ light = false, compact = false }) {
   return (
@@ -112,9 +112,35 @@ export function Banner({ tone = 'info', children }) {
 }
 
 export function RolePill({ value }) {
-  const label = value === 'ADMIN' ? 'Admin' : value === 'MANAGER' ? 'Manager' : 'Rep';
-  const tone = value === 'ADMIN' ? 'bg-slate-900 text-white' : value === 'MANAGER' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-600';
-  return <span className={cx('inline-flex rounded-full px-2.5 py-1 text-xs font-medium', tone)}>{label}</span>;
+  const lead = value === 'HEAD_OF_SALES' || value === 'ADMIN' || value === 'MANAGER';
+  const tone = lead ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600';
+  return <span className={cx('inline-flex rounded-full px-2.5 py-1 text-xs font-medium', tone)}>{roleLabel(value)}</span>;
+}
+
+export function RolePicker({ value, onChange }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {ROLES.map((role) => {
+        const selected = value === role;
+        return (
+          <button
+            key={role}
+            type="button"
+            onClick={() => onChange(role)}
+            className={cx(
+              'rounded-2xl border px-3 py-3 text-left transition',
+              selected ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+            )}
+          >
+            <p className="text-sm font-semibold">{roleLabel(role)}</p>
+            <p className={cx('mt-1 text-xs', selected ? 'text-white/75' : 'text-slate-400')}>
+              {role === 'HEAD_OF_SALES' ? 'Add and remove teammates' : 'Work the shared pipeline'}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Spinner() {

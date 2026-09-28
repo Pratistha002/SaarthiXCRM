@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { Logo } from '../ui';
+import { Logo, RolePicker } from '../ui';
 
 export default function Register() {
   const { user, save } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '', company: '', inviteCode: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', company: '', inviteCode: '', role: 'HEAD_OF_SALES' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   if (user) return <Navigate to="/dashboard" replace />;
@@ -54,6 +54,11 @@ export default function Register() {
               <input className="pill-input mt-2 !px-4" required={key !== 'company' && key !== 'inviteCode'} type={type} minLength={key === 'password' ? 8 : undefined} placeholder={placeholder} value={form[key]} onChange={(event) => set(key, event.target.value)} />
             </label>
           ))}
+          <label className="mt-4 block text-sm font-medium">Your role
+            <div className="mt-2">
+              <RolePicker value={form.role} onChange={(role) => set('role', role)} />
+            </div>
+          </label>
           {error && <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
           <button className="btn mt-6 h-12 w-full" disabled={busy} type="submit">{busy ? 'Creating…' : 'Create account'}</button>
           <p className="mt-6 text-center text-sm text-slate-500">

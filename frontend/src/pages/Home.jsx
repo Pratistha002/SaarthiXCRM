@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { isPlatformAdmin } from '../lib';
 import { Logo } from '../ui';
 
 const NAV = [
@@ -33,8 +34,8 @@ export default function Home() {
           <div className="ml-auto flex items-center gap-2">
             {user ? (
               <>
-                {user.platformAdmin && <Link to="/admin" className="btn-ghost">Admin</Link>}
-                <Link to="/dashboard" className="btn">Open dashboard</Link>
+                {isPlatformAdmin(user) && <Link to="/admin" className="btn-ghost">Admin</Link>}
+                <Link to={isPlatformAdmin(user) ? '/admin' : '/dashboard'} className="btn">{isPlatformAdmin(user) ? 'Open console' : 'Open dashboard'}</Link>
               </>
             ) : (
               <>

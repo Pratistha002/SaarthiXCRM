@@ -59,7 +59,7 @@ public class TeamService {
             row.put("id", user.getId());
             row.put("name", user.getName());
             row.put("email", user.getEmail());
-            row.put("role", user.getRole());
+            row.put("role", Catalog.normalizeRole(user.getRole()));
             row.put("title", user.getTitle() == null ? "" : user.getTitle());
             row.put("leads", owned.size());
             row.put("openValue", open);
@@ -74,12 +74,12 @@ public class TeamService {
                 "workspace", Map.of("id", workspace.getId(), "name", workspace.getName(), "inviteCode", workspace.getInviteCode()),
                 "members", members,
                 "unassigned", unassigned,
-                "youAreAdmin", "ADMIN".equals(me.getRole()));
+                "youAreAdmin", Catalog.isHeadOfSales(me.getRole()));
     }
 
     public Map<String, Object> addMember(MemberRequest request) {
         User admin = scope.requireAdmin();
-        Catalog.require(request.role(), Catalog.ROLES, "Role");
+        String role = Catalog.requireUserRole(request.role());
         String email = request.email().trim().toLowerCase();
         if (users.existsByEmailIgnoreCase(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Someone already uses that email");
@@ -89,7 +89,7 @@ public class TeamService {
         user.setEmail(email);
         user.setPasswordHash(encoder.encode(request.password()));
         user.setWorkspaceId(admin.getWorkspaceId());
-        user.setRole(request.role());
+        user.setRole(role);
         user.setTitle(request.title() == null ? "" : request.title().trim());
         user.setCreatedAt(Instant.now());
         users.save(user);
@@ -100,12 +100,12 @@ public class TeamService {
 
     public Map<String, Object> changeRole(String id, RoleRequest request) {
         User admin = scope.requireAdmin();
-        Catalog.require(request.role(), Catalog.ROLES, "Role");
+        String next = Catalog.requireUserRole(request.role());
         User member = member(id, admin.getWorkspaceId());
-        if (member.getId().equals(admin.getId()) && !"ADMIN".equals(request.role()) && adminCount(admin.getWorkspaceId()) <= 1) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promote another admin before changing your own role");
+        if (member.getId().equals(admin.getId()) && !Catalog.isHeadOfSales(next) && headCount(admin.getWorkspaceId()) <= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Promote another Head of Sales before changing your own role");
         }
-        member.setRole(request.role());
+        member.setRole(next);
         users.save(member);
         return Map.of("id", member.getId(), "role", member.getRole());
     }
@@ -133,8 +133,10 @@ public class TeamService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Teammate not found"));
     }
 
-    private long adminCount(String workspaceId) {
-        return users.findByWorkspaceId(workspaceId).stream().filter(user -> "ADMIN".equals(user.getRole())).count();
+    private long headCount(String workspaceId) {
+        return users.findByWorkspaceId(workspaceId).stream()
+                .filter(user -> Catalog.isHeadOfSales(user.getRole()))
+                .count();
     }
 
     public record MemberRequest(

@@ -1,6 +1,7 @@
 package com.saarthix.crm.security;
 
 import com.saarthix.crm.model.User;
+import com.saarthix.crm.domain.Catalog;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,8 +32,8 @@ public class Scope {
 
     public User requireAdmin() {
         User user = user();
-        if (!"ADMIN".equals(user.getRole())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only an admin can do that");
+        if (!Catalog.isHeadOfSales(user.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only Head of Sales can add or remove teammates");
         }
         return user;
     }
