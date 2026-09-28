@@ -4,12 +4,12 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  PRIORITIES, PURPOSES, TONES, ago, closeReasons, cx, dueLabel, isOverdue, isoDay, money, prettyDate, prettyTime,
+  EXIT_STAGES, FUNNEL_STAGES, PRIORITIES, ago, closeReasons, cx, dueLabel, isExitStage, isOverdue, isoDay, money, prettyDate, prettyTime,
+  primaryPhone,
 } from '../lib';
 import { Banner, Field, Modal, Spinner } from '../ui';
+import CallModal from './CallModal';
 import LeadForm from './LeadForm';
-
-const STEPS = ['New', 'Qualified', 'Proposal', 'Won'];
 
 const RELATED = [
   ['notes', 'Notes'],
@@ -32,9 +32,10 @@ export default function LeadDetail() {
   const [tab, setTab] = useState('overview');
   const [editing, setEditing] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [callOpen, setCallOpen] = useState(false);
+  const [notice, setNotice] = useState('');
   const [closing, setClosing] = useState(null);
   const [menu, setMenu] = useState(false);
-  const [summary, setSummary] = useState(null);
   const [sidebar, setSidebar] = useState(true);
 
   async function load() {
@@ -49,6 +50,8 @@ export default function LeadDetail() {
   useEffect(() => {
     setData(null);
     setEditing(false);
+    setCallOpen(false);
+    setNotice('');
     setTab('overview');
     load();
   }, [id]);
@@ -88,8 +91,12 @@ export default function LeadDetail() {
   const go = (target) => navigate(`/leads/${target}`, { state: { ids } });
 
   async function moveStage(stage, closeReason = '', closeNote = '') {
-    if ((stage === 'Won' || stage === 'Lost') && !closeReason) {
+    if (isExitStage(stage) && !closeReason) {
       setClosing(stage);
+      return;
+    }
+    if (stage === 'Converted' && !lead.convertedContactId) {
+      await convert();
       return;
     }
     try {
@@ -118,15 +125,12 @@ export default function LeadDetail() {
     navigate('/leads');
   }
 
-  async function analyze() {
-    setMenu(false);
-    setSummary({ busy: true, text: '' });
-    try {
-      const result = await api('/api/ai/summary', { method: 'POST', body: { leadId: id } });
-      setSummary({ busy: false, text: result.summary });
-    } catch (err) {
-      setSummary({ busy: false, text: err.message });
-    }
+  async function callSaved(result) {
+    setCallOpen(false);
+    const call = result.activity?.call || {};
+    const next = call.nextActionAt ? ` Next: ${call.nextAction} on ${prettyDate(call.nextActionAt)}, ${prettyTime(call.nextActionAt)}.` : '';
+    setNotice(`Call logged (${call.outcome}). Lead status: ${result.lead?.stage || lead.stage}.${next}`);
+    await load();
   }
 
   function jump(key) {
@@ -139,7 +143,7 @@ export default function LeadDetail() {
     connected: data.contact ? 1 : 0,
     attachments: data.attachments.length,
     open: data.openActivities.length,
-    closed: data.closedActivities.length,
+    closed: data.closedActivities.length + (data.calls?.length || 0),
     emails: data.emails.length,
   };
 
@@ -156,7 +160,9 @@ export default function LeadDetail() {
           <Tags lead={lead} onChange={load} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="btn !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>Send Email</button>
+          <button type="button" className="btn !rounded-lg !py-2" onClick={() => setCallOpen({ number: primaryPhone(lead) })}>📞 Call</button>
+          <button type="button" className="btn-ghost !rounded-lg !py-2" disabled title="WhatsApp is coming soon">💬 WhatsApp</button>
+          <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>✉ Send Email</button>
           <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={convert} disabled={Boolean(lead.convertedContactId)}>
             {lead.convertedContactId ? 'Converted' : 'Convert'}
           </button>
@@ -165,7 +171,6 @@ export default function LeadDetail() {
             <button type="button" className="btn-ghost !rounded-lg !px-3 !py-2" onClick={() => setMenu(!menu)} aria-label="More">•••</button>
             {menu && (
               <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200">
-                <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={analyze}>✦ AI summary</button>
                 <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenu(false); window.print(); }}>Print</button>
                 <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={remove}>Delete</button>
               </div>
@@ -177,6 +182,16 @@ export default function LeadDetail() {
       </div>
 
       {error && <div className="mb-3"><Banner tone="danger">{error}</Banner></div>}
+      {notice && (
+        <div className="mb-3">
+          <Banner tone="good">
+            <span className="flex items-start justify-between gap-3">
+              {notice}
+              <button type="button" className="text-emerald-700/70 hover:text-emerald-800" onClick={() => setNotice('')} aria-label="Dismiss">×</button>
+            </span>
+          </Banner>
+        </div>
+      )}
 
       <div className="flex gap-4">
         {sidebar && (
@@ -214,11 +229,11 @@ export default function LeadDetail() {
 
           {tab === 'overview' ? (
             <>
-              <OverviewCard lead={lead} onEmail={() => setEmailOpen(true)} />
+              <OverviewCard lead={lead} onEmail={() => setEmailOpen(true)} onCall={(number) => setCallOpen({ number })} />
               <NotesSection lead={lead} notes={data.notes} onChange={load} />
               <ConnectedSection lead={lead} contact={data.contact} onConvert={convert} />
               <AttachmentsSection lead={lead} files={data.attachments} onChange={load} />
-              <ActivitiesSection lead={lead} open={data.openActivities} closed={data.closedActivities} members={members} user={user} onChange={load} />
+              <ActivitiesSection lead={lead} open={data.openActivities} closed={data.closedActivities} calls={data.calls || []} members={members} user={user} onChange={load} />
               <EmailsSection emails={data.emails} onCompose={() => setEmailOpen(true)} />
             </>
           ) : (
@@ -228,12 +243,16 @@ export default function LeadDetail() {
       </div>
 
       {emailOpen && <SendEmailModal lead={lead} onClose={() => setEmailOpen(false)} onSent={load} />}
-      {closing && <CloseModal stage={closing} onClose={() => setClosing(null)} onSubmit={(reason, note) => moveStage(closing, reason, note)} />}
-      {summary && (
-        <Modal title="AI Lead Summary" subtitle={lead.name} onClose={() => setSummary(null)}>
-          <p className="text-sm leading-relaxed text-slate-700">{summary.busy ? 'Analyzing…' : summary.text}</p>
-        </Modal>
+      {callOpen && (
+        <CallModal
+          lead={lead}
+          phone={callOpen.number}
+          onClose={() => setCallOpen(false)}
+          onSaved={callSaved}
+          onEditLead={() => { setCallOpen(false); setEditing(true); }}
+        />
       )}
+      {closing && <CloseModal stage={closing} onClose={() => setClosing(null)} onSubmit={(reason, note) => moveStage(closing, reason, note)} />}
     </div>
   );
 }
@@ -276,22 +295,26 @@ function Tags({ lead, onChange }) {
 }
 
 function StageBar({ stage, onMove }) {
-  const current = STEPS.indexOf(stage);
-  const lost = stage === 'Lost';
+  const [exitOpen, setExitOpen] = useState(false);
+  const current = FUNNEL_STAGES.indexOf(stage);
+  const exited = isExitStage(stage);
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-slate-100">
-      <div className="flex flex-1 overflow-x-auto">
-        {STEPS.map((step, i) => {
+      <div className={cx('flex flex-1 overflow-x-auto', exited && 'opacity-50')}>
+        {FUNNEL_STAGES.map((step, i) => {
           const active = step === stage;
-          const done = !lost && current >= 0 && i < current;
+          const done = current >= 0 && i < current;
+          const converted = step === 'Converted';
           return (
             <button
               key={step}
               type="button"
               onClick={() => !active && onMove(step)}
               className={cx(
-                'relative -ml-2 min-w-[130px] flex-1 px-6 py-2 text-sm first:ml-0 transition',
-                active ? 'bg-blue-100 font-medium text-blue-700' : done ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
+                'relative -ml-2 min-w-[120px] flex-1 whitespace-nowrap px-6 py-2 text-sm first:ml-0 transition',
+                active && converted ? 'bg-emerald-100 font-medium text-emerald-700'
+                  : active ? 'bg-blue-100 font-medium text-blue-700'
+                    : done ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
               )}
               style={{ clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)' }}
             >
@@ -300,14 +323,32 @@ function StageBar({ stage, onMove }) {
           );
         })}
       </div>
-      <button
-        type="button"
-        onClick={() => !lost && onMove('Lost')}
-        className={cx('rounded-lg border px-3 py-2 text-sm', lost ? 'border-rose-300 bg-rose-50 text-rose-600' : 'border-slate-200 text-rose-500 hover:bg-rose-50')}
-        title="Mark as lost"
-      >
-        👎 {lost ? 'Lost' : ''}
-      </button>
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setExitOpen(!exitOpen)}
+          className={cx('flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm', exited ? 'border-rose-300 bg-rose-50 font-medium text-rose-600' : 'border-slate-200 text-rose-500 hover:bg-rose-50')}
+          title="Close this lead without converting"
+        >
+          👎 {exited ? stage : ''} <span className="text-xs">▾</span>
+        </button>
+        {exitOpen && (
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200">
+            <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">Exit states</p>
+            {EXIT_STAGES.map((item) => (
+              <button
+                key={item}
+                type="button"
+                disabled={item === stage}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-rose-50 hover:text-rose-600 disabled:text-slate-300 disabled:hover:bg-transparent"
+                onClick={() => { setExitOpen(false); onMove(item); }}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -328,14 +369,18 @@ function detailRows(lead) {
     rows.push(['Name', lead.name], ['Company', lead.company]);
   }
   rows.push(
-    ['Lead Source', lead.source], ['Deal Value', money(lead.value)], ['Priority', lead.priority], ['Lead Score', lead.score],
+    ['Lead Source', lead.source], ['Deal Value', money(lead.value)], ['Priority', lead.priority],
     ['Created', `${prettyDate(lead.createdAt)} ${prettyTime(lead.createdAt)}`],
   );
   if (lead.closeReason) rows.push([`${lead.stage} Reason`, lead.closeNote ? `${lead.closeReason} — ${lead.closeNote}` : lead.closeReason]);
   return rows;
 }
 
-function OverviewCard({ lead, onEmail }) {
+function stamp(iso) {
+  return iso ? `${prettyDate(iso)} • ${prettyTime(iso)}` : '—';
+}
+
+function OverviewCard({ lead, onEmail, onCall }) {
   const [details, setDetails] = useState(false);
   const address = [lead.building, lead.street, lead.city, lead.state, lead.zip, lead.country].filter(Boolean);
   return (
@@ -345,9 +390,13 @@ function OverviewCard({ lead, onEmail }) {
         <Info label="Email">
           {lead.email ? <button type="button" className="text-blue-600 hover:underline" onClick={onEmail}>{lead.email}</button> : '—'}
         </Info>
-        {lead.leadType !== 'Student' && <Info label="Phone"><PhoneLink value={lead.phone} /></Info>}
-        <Info label="Mobile"><PhoneLink value={lead.mobile} /></Info>
+        {lead.leadType !== 'Student' && <Info label="Phone"><PhoneLink value={lead.phone} onCall={() => onCall(lead.phone)} /></Info>}
+        <Info label="Mobile"><PhoneLink value={lead.mobile} onCall={() => onCall(lead.mobile)} /></Info>
         <Info label="Lead Status">{lead.stage}</Info>
+        <Info label="Last Contacted">{stamp(lead.lastContactedAt)}</Info>
+        <Info label="Next Follow-up">
+          <span className={cx(lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date() && 'text-rose-600')}>{stamp(lead.nextFollowUpAt)}</span>
+        </Info>
       </dl>
       <button type="button" className="mt-5 text-sm font-medium text-blue-600" onClick={() => setDetails(!details)}>
         {details ? 'Hide Details' : 'Show Details'}
@@ -386,12 +435,12 @@ function Info({ label, children }) {
   );
 }
 
-function PhoneLink({ value }) {
+function PhoneLink({ value, onCall }) {
   if (!value) return '—';
   return (
     <span className="inline-flex items-center gap-2">
       {value}
-      <a href={`tel:${value}`} className="grid h-6 w-6 place-items-center rounded-md bg-emerald-50 text-xs text-emerald-600 hover:bg-emerald-100" aria-label={`Call ${value}`}>✆</a>
+      <button type="button" onClick={onCall} className="grid h-6 w-6 place-items-center rounded-md bg-emerald-50 text-xs text-emerald-600 hover:bg-emerald-100" aria-label={`Call ${value}`}>✆</button>
     </span>
   );
 }
@@ -560,7 +609,16 @@ function size(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function ActivitiesSection({ lead, open, closed, members, user, onChange }) {
+function dueText(task) {
+  return task.dueAt ? `${dueLabel(task.dueDate)} • ${prettyTime(task.dueAt)}` : dueLabel(task.dueDate);
+}
+
+function callResult(call = {}) {
+  if (call.outcome !== 'Connected') return call.outcome;
+  return `Connected · ${call.customerResponse === 'Other' ? call.customerResponseOther : call.customerResponse}`;
+}
+
+function ActivitiesSection({ lead, open, closed, calls, members, user, onChange }) {
   const blank = { title: '', dueDate: isoDay(new Date()), priority: 'Medium', assigneeId: user?.id || '', details: '' };
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
@@ -586,10 +644,15 @@ function ActivitiesSection({ lead, open, closed, members, user, onChange }) {
     <li key={task.id} className="flex items-start gap-3 py-3 text-sm">
       <input type="checkbox" className="mt-1" checked={done} onChange={() => status(task, done ? 'Pending' : 'Completed')} aria-label={done ? 'Reopen' : 'Mark complete'} />
       <div className="flex-1">
-        <p className={cx('font-medium', done && 'text-slate-400 line-through')}>{task.title}</p>
+        <p className={cx('font-medium', done && 'text-slate-400 line-through')}>
+          {task.type && <span className="mr-2 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 no-underline">{task.type}</span>}
+          {task.title}
+        </p>
         {task.details && <p className="text-xs text-slate-500">{task.details}</p>}
         <p className={cx('mt-0.5 text-xs', !done && isOverdue(task) ? 'text-rose-600' : 'text-slate-400')}>
-          Due {dueLabel(task.dueDate)} · {task.priority} · {task.assigneeName}{!done && isOverdue(task) ? ' · Overdue' : ''}
+          Due {dueText(task)} · {task.priority} · {task.assigneeName}
+          {task.reminder && task.reminder !== 'None' ? ` · 🔔 ${task.reminder}` : ''}
+          {!done && isOverdue(task) ? ' · Overdue' : ''}
         </p>
       </div>
     </li>
@@ -628,8 +691,20 @@ function ActivitiesSection({ lead, open, closed, members, user, onChange }) {
         {open.length === 0 && !form && <Empty>No open activities.</Empty>}
       </Section>
       <Section id="closed" title="Closed Activities">
-        <ul className="divide-y divide-slate-100">{closed.map((task) => row(task, true))}</ul>
-        {closed.length === 0 && <Empty>No closed activities.</Empty>}
+        <ul className="divide-y divide-slate-100">
+          {calls.map((item) => (
+            <li key={item.id} className="flex items-start gap-3 py-3 text-sm">
+              <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md bg-emerald-50 text-xs text-emerald-600">📞</span>
+              <div className="flex-1">
+                <p className="font-medium">Call · {callResult(item.call)}</p>
+                {item.call?.notes && <p className="line-clamp-2 text-xs text-slate-500">{item.call.notes}</p>}
+                <p className="mt-0.5 text-xs text-slate-400">{stamp(item.createdAt)} · {item.call?.phone} · {item.actorName}</p>
+              </div>
+            </li>
+          ))}
+          {closed.map((task) => row(task, true))}
+        </ul>
+        {closed.length === 0 && calls.length === 0 && <Empty>No closed activities.</Empty>}
       </Section>
     </>
   );
@@ -656,6 +731,7 @@ function EmailsSection({ emails, onCompose }) {
 }
 
 const HISTORY_FILTERS = [
+  ['calls', 'Calls', ['call']],
   ['status', 'Status changes', ['stage']],
   ['fields', 'Field updates', ['field', 'owner']],
   ['notes', 'Notes', ['note']],
@@ -665,7 +741,7 @@ const HISTORY_FILTERS = [
   ['other', 'Other', ['created', 'converted']],
 ];
 
-const ICONS = { stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
+const ICONS = { call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
 
 function dayKey(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -688,7 +764,44 @@ function splitChange(detail = '') {
   return { from, to, extra: rest.join(' · ') };
 }
 
-function historyText(item) {
+function CallEntry({ item, lead }) {
+  const call = item.call || {};
+  const connected = call.outcome === 'Connected';
+  return (
+    <span className="block">
+      <b className="font-semibold text-slate-800">{connected ? 'Call Completed' : 'Call Attempted'}</b>
+      <span className="mt-2 block max-w-xl rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-sm">
+        <span className="block font-medium text-slate-800">{lead.name}</span>
+        {lead.company && lead.company !== lead.name && <span className="block text-xs text-slate-500">{lead.company}</span>}
+        <span className="mt-2 grid grid-cols-[130px_1fr] gap-x-3 gap-y-1.5 text-xs">
+          <span className="text-slate-500">Outcome</span>
+          <span className={cx('font-medium', connected ? 'text-emerald-700' : 'text-slate-700')}>{call.outcome}</span>
+          {connected && (
+            <>
+              <span className="text-slate-500">Customer Response</span>
+              <span className="font-medium text-slate-700">{call.customerResponse === 'Other' ? call.customerResponseOther : call.customerResponse}</span>
+            </>
+          )}
+          {call.notes && (
+            <>
+              <span className="text-slate-500">Notes</span>
+              <span className="whitespace-pre-wrap text-slate-700">{call.notes}</span>
+            </>
+          )}
+          <span className="text-slate-500">Next Action</span>
+          <span className="text-slate-700">
+            {call.nextActionAt ? <>📅 {call.nextAction} · {prettyDate(call.nextActionAt)} • {prettyTime(call.nextActionAt)}</> : call.nextAction}
+          </span>
+          <span className="text-slate-500">Number</span>
+          <span className="text-slate-700">{call.phone}</span>
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function historyText(item, lead) {
+  if (item.type === 'call') return <CallEntry item={item} lead={lead} />;
   if (item.type === 'stage') {
     const { from, to, extra } = splitChange(item.detail);
     return (
@@ -726,10 +839,13 @@ function TimelineTab({ data, onChange }) {
   const history = data.timeline.filter((item) => allowed.includes(item.type) || (!known.includes(item.type) && filters.includes('other')));
 
   const interactions = [
+    ...(data.calls || []).map((item) => ({
+      id: `c-${item.id}`, kind: 'Call', icon: '📞', createdAt: item.createdAt, title: callResult(item.call), body: item.call?.notes, by: item.actorName,
+    })),
     ...data.notes.map((note) => ({ id: `n-${note.id}`, kind: 'Note', icon: '🗒', createdAt: note.createdAt, title: note.body, by: note.authorName })),
     ...data.emails.map((mail) => ({ id: `e-${mail.id}`, kind: 'Email', icon: '✉', createdAt: mail.createdAt, title: mail.title.replace(/^Email sent: /, ''), body: mail.detail, by: mail.actorName })),
     ...[...data.openActivities, ...data.closedActivities].map((task) => ({
-      id: `t-${task.id}`, kind: task.status === 'Completed' ? 'Follow-up · Completed' : 'Follow-up', icon: '☑', createdAt: task.createdAt, title: task.title, body: `Due ${dueLabel(task.dueDate)} · ${task.priority}`, by: task.assigneeName,
+      id: `t-${task.id}`, kind: task.status === 'Completed' ? 'Follow-up · Completed' : 'Follow-up', icon: '☑', createdAt: task.createdAt, title: task.title, body: `Due ${dueText(task)} · ${task.priority}`, by: task.assigneeName,
     })),
   ].filter((item) => item.createdAt).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -782,7 +898,7 @@ function TimelineTab({ data, onChange }) {
                     {data.openActivities.map((task) => (
                       <li key={task.id} className="flex justify-between gap-3">
                         <span>☑ {task.title}</span>
-                        <span className={cx('text-xs', isOverdue(task) ? 'text-rose-600' : 'text-slate-500')}>{dueLabel(task.dueDate)} · {task.assigneeName}</span>
+                        <span className={cx('text-xs', isOverdue(task) ? 'text-rose-600' : 'text-slate-500')}>{dueText(task)} · {task.assigneeName}</span>
                       </li>
                     ))}
                   </ul>
@@ -802,7 +918,7 @@ function TimelineTab({ data, onChange }) {
                         {i < group.items.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
                       </div>
                       <div className="pb-6 pt-1 text-sm text-slate-700">
-                        <p>{historyText(item)}</p>
+                        <div>{historyText(item, data.lead)}</div>
                         <p className="mt-0.5 text-xs text-slate-500">by {item.actorName} {dayKey(item.createdAt)}</p>
                         {noteFor === item.id ? (
                           <InlineNote lead={data.lead} onDone={async (saved) => { setNoteFor(null); if (saved) await onChange(); }} />
@@ -839,7 +955,7 @@ function TimelineTab({ data, onChange }) {
                 </ul>
               </div>
             ))}
-            {interactions.length === 0 && <Empty>No notes, emails or follow-ups with this lead yet.</Empty>}
+            {interactions.length === 0 && <Empty>No calls, notes, emails or follow-ups with this lead yet.</Empty>}
           </>
         )}
       </div>
@@ -873,57 +989,28 @@ function InlineNote({ lead, onDone }) {
 function SendEmailModal({ lead, onClose, onSent }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [purpose, setPurpose] = useState('Follow-up');
-  const [tone, setTone] = useState('Formal');
-  const [busy, setBusy] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
 
-  async function draft() {
-    setBusy('draft');
-    setError('');
-    try {
-      const result = await api('/api/ai/email', { method: 'POST', body: { leadId: lead.id, purpose, tone } });
-      setSubject(result.subject);
-      setBody(result.body);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy('');
-    }
-  }
-
   async function send(event) {
     event.preventDefault();
-    setBusy('send');
+    setBusy(true);
     setError('');
     try {
-      await api('/api/ai/email/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
+      await api('/api/mail/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
       setSent(true);
       await onSent();
     } catch (err) {
       setError(err.message);
     } finally {
-      setBusy('');
+      setBusy(false);
     }
   }
 
   return (
     <Modal title="Send Email" subtitle={`To ${lead.name}${lead.email ? ` <${lead.email}>` : ''}`} onClose={onClose} wide>
       {!lead.email && <div className="mb-3"><Banner tone="warn">This lead has no email address. Add one with Edit first.</Banner></div>}
-      <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl bg-slate-50 p-3">
-        <Field label="Purpose">
-          <select className="field !py-2" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
-            {PURPOSES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-        <Field label="Tone">
-          <select className="field !py-2" value={tone} onChange={(event) => setTone(event.target.value)}>
-            {TONES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-        <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={draft} disabled={Boolean(busy)}>{busy === 'draft' ? 'Writing…' : '✦ Draft with AI'}</button>
-      </div>
       <form onSubmit={send} className="space-y-3">
         <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
         <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
@@ -931,7 +1018,7 @@ function SendEmailModal({ lead, onClose, onSent }) {
         {sent && <Banner tone="good">Email sent to {lead.email}. In Docker you can read it at http://localhost:8025.</Banner>}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-          <button type="submit" className="btn" disabled={Boolean(busy) || !lead.email}>{busy === 'send' ? <Spinner /> : null}Send</button>
+          <button type="submit" className="btn" disabled={busy || !lead.email}>{busy ? <Spinner /> : null}Send</button>
         </div>
       </form>
     </Modal>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { STAGES, closeReasons, compact, cx, money, stageDot } from '../lib';
+import { EXIT_STAGES, STAGES, closeReasons, compact, cx, isExitStage, money, stageDot } from '../lib';
 import { Avatar, Field, Modal, PriorityPill } from '../ui';
 
 export default function Pipeline() {
@@ -9,7 +9,6 @@ export default function Pipeline() {
   const [leads, setLeads] = useState([]);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
-  const [hint, setHint] = useState({});
   const [dragOver, setDragOver] = useState('');
   const [closing, setClosing] = useState(null);
 
@@ -26,7 +25,7 @@ export default function Pipeline() {
     const id = event.dataTransfer.getData('text/plain');
     setDragOver('');
     if (!id) return;
-    if (stage === 'Won' || stage === 'Lost') {
+    if (isExitStage(stage)) {
       const lead = leads.find((item) => item.id === id);
       setClosing({ id, stage, name: lead?.name || 'this deal', closeReason: '', closeNote: '' });
       return;
@@ -45,20 +44,8 @@ export default function Pipeline() {
     }
   }
 
-  async function suggest(lead) {
-    setHint((current) => ({ ...current, [lead.id]: 'Thinking…' }));
-    try {
-      const result = await api('/api/ai/next-step', { method: 'POST', body: { leadId: lead.id } });
-      setHint((current) => ({ ...current, [lead.id]: result.suggestion }));
-    } catch (err) {
-      setHint((current) => ({ ...current, [lead.id]: err.message }));
-    }
-  }
-
-  const won = summary?.stages?.Won || 0;
-  const lost = summary?.stages?.Lost || 0;
-  const decided = won + lost;
-  const winRate = decided ? Math.round((won / decided) * 100) : 0;
+  const won = summary?.stages?.Converted || 0;
+  const lost = EXIT_STAGES.reduce((sum, item) => sum + (summary?.stages?.[item] || 0), 0);
   const open = (summary?.total || 0) - won - lost;
 
   return (
@@ -71,8 +58,8 @@ export default function Pipeline() {
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ['Total pipeline', compact(summary?.totalValue || 0)],
-          ['Open deals', open],
-          ['Won value', compact(summary?.wonValue || 0)],
+          ['Open leads', open],
+          ['Converted value', compact(summary?.wonValue || 0)],
           ['Weighted forecast', compact(summary?.forecast || 0)],
         ].map(([label, value]) => (
           <div key={label} className="card !p-4">
@@ -81,7 +68,7 @@ export default function Pipeline() {
           </div>
         ))}
       </div>
-      <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-5">
+      <div className="flex gap-4 overflow-x-auto pb-3">
         {STAGES.map((stage) => {
           const column = leads.filter((lead) => lead.stage === stage);
           const value = column.reduce((sum, lead) => sum + lead.value, 0);
@@ -91,7 +78,7 @@ export default function Pipeline() {
               onDragOver={(event) => { event.preventDefault(); setDragOver(stage); }}
               onDragLeave={() => setDragOver('')}
               onDrop={(event) => drop(stage, event)}
-              className={cx('rounded-3xl bg-slate-100/80 p-3', dragOver === stage && 'ring-2 ring-blue-400')}
+              className={cx('w-72 shrink-0 rounded-3xl p-3', isExitStage(stage) ? 'bg-rose-50/70' : 'bg-slate-100/80', stage === EXIT_STAGES[0] && 'ml-4 border-l-2 border-dashed border-slate-300', dragOver === stage && 'ring-2 ring-blue-400')}
             >
               <div className="mb-3 flex items-center justify-between px-1">
                 <p className="flex items-center gap-2 text-sm font-semibold">
@@ -114,7 +101,7 @@ export default function Pipeline() {
                     <div className="flex items-start gap-2">
                       <Avatar name={lead.name} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <button type="button" className="block truncate text-left text-sm font-semibold" onClick={() => navigate(`/leads?lead=${lead.id}`)}>{lead.name}</button>
+                        <button type="button" className="block truncate text-left text-sm font-semibold" onClick={() => navigate(`/leads/${lead.id}`, { state: { ids: leads.map((item) => item.id) } })}>{lead.name}</button>
                         <p className="truncate text-xs text-slate-400">{lead.company}{lead.ownerName ? ` · ${lead.ownerName}` : ''}</p>
                       </div>
                       <span className="text-slate-300">⋮</span>
@@ -123,8 +110,6 @@ export default function Pipeline() {
                       <span className="text-sm font-semibold">{money(lead.value)}</span>
                       <PriorityPill value={lead.priority} />
                     </div>
-                    <button type="button" className="mt-3 text-xs font-medium text-blue-600" onClick={() => suggest(lead)}>✦ AI suggest next step</button>
-                    {hint[lead.id] && <p className="mt-2 text-xs leading-relaxed text-slate-500">{hint[lead.id]}</p>}
                   </article>
                 ))}
               </div>
@@ -150,7 +135,7 @@ export default function Pipeline() {
             </Field>
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-ghost" onClick={() => setClosing(null)}>Cancel</button>
-              <button className="btn" type="submit">Save {closing.stage.toLowerCase()}</button>
+              <button className="btn" type="submit">Mark {closing.stage}</button>
             </div>
           </form>
         </Modal>

@@ -15,9 +15,15 @@ public class FollowUp {
     @Indexed
     private String workspaceId;
     private String ownerId;
+    private String type;
     private String title;
     private String details;
     private String dueDate;
+    private String dueTime;
+    private Instant dueAt;
+    private String reminder;
+    private Instant remindAt;
+    private Instant reminderSentAt;
     private String priority;
     private String status;
     private String leadId;

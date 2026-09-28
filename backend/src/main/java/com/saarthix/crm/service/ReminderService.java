@@ -6,6 +6,7 @@ import com.saarthix.crm.repo.FollowUpRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,22 @@ public class ReminderService {
     @Scheduled(cron = "${app.reminders.cron:0 0 8 * * *}")
     public void morningSweep() {
         run();
+    }
+
+    /** Sends the "15 minutes / 1 hour / 1 day before" reminders chosen when a follow-up was scheduled. */
+    @Scheduled(fixedDelayString = "${app.reminders.poll-ms:60000}")
+    public void timedReminders() {
+        Instant now = Instant.now();
+        for (FollowUp task : tasks.findByRemindAtLessThanEqualAndReminderSentAtIsNullAndStatusNot(now, "Completed")) {
+            String when = task.getDueTime() == null ? task.getDueDate() : task.getDueDate() + " at " + task.getDueTime();
+            String body = task.getTitle()
+                    + (task.getLeadName() == null || task.getLeadName().isBlank() ? "" : " · " + task.getLeadName())
+                    + " · " + when;
+            String link = task.getLeadId() == null || task.getLeadId().isBlank() ? "/follow-ups" : "/leads/" + task.getLeadId();
+            notifications.push(task.getAssigneeId(), task.getWorkspaceId(), "due", "Reminder: " + task.getTitle(), body, link);
+            task.setReminderSentAt(now);
+            tasks.save(task);
+        }
     }
 
     public Map<String, Object> run() {

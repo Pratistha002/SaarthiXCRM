@@ -1,5 +1,7 @@
 package com.saarthix.crm.service;
 
+import com.saarthix.crm.domain.Catalog;
+
 import com.saarthix.crm.model.Contact;
 import com.saarthix.crm.model.FollowUp;
 import com.saarthix.crm.model.Lead;
@@ -73,11 +75,11 @@ public class WorkspaceSeeder {
                 new Row("Ruby Bennett", "Wayne Tech", 118000, "New", "High", "Event", "Booth conversation. Interested in pipeline visibility for a 12-person team."),
                 new Row("Julian Webb", "Wonka Industries", 52000, "New", "Medium", "Website", "Downloaded the overview and asked for a follow-up next week."),
                 new Row("Ruby Murphy", "Black Mesa", 27000, "New", "Medium", "Event", "Early-stage interest. Needs an internal sponsor."),
-                new Row("Abigail Diaz", "Wayne Enterprises", 54000, "New", "Medium", "Referral", "Champion is pushing internally. Legal review is the blocker."),
-                new Row("Sam Rivera", "Hooli", 59000, "New", "Low", "Cold Outreach", "Opened two emails. No reply yet."),
-                new Row("Nina Cho", "Pied Piper", 61000, "New", "Medium", "Social", "Commented on a product post and asked how AI email drafts work."),
-                new Row("Omar Singh", "Soylent", 61000, "New", "High", "Cold Outreach", "Replied that Q4 budget is still being shaped."),
-                new Row("Priya Nair", "Initech", 61000, "New", "Medium", "Event", "Wants a technical session with the operations lead."),
+                new Row("Abigail Diaz", "Wayne Enterprises", 54000, "Contacted", "Medium", "Referral", "Champion is pushing internally. Legal review is the blocker."),
+                new Row("Sam Rivera", "Hooli", 59000, "Attempted Contact", "Low", "Cold Outreach", "Opened two emails. No reply yet."),
+                new Row("Nina Cho", "Pied Piper", 61000, "Attempted Contact", "Medium", "Social", "Commented on a product post and asked about pipeline visibility."),
+                new Row("Omar Singh", "Soylent", 61000, "Contacted", "High", "Cold Outreach", "Replied that Q4 budget is still being shaped."),
+                new Row("Priya Nair", "Initech", 61000, "Contacted", "Medium", "Event", "Wants a technical session with the operations lead."),
                 new Row("Noah Khan", "Nakatomi", 144000, "Qualified", "Low", "Social", "Wants SSO and SCIM before they will commit."),
                 new Row("Lucas Brooks", "Cogswell Cogs", 171000, "Qualified", "Medium", "Referral", "Technical deep-dive requested with their solutions team."),
                 new Row("Zoe Diaz", "Globex", 180000, "Qualified", "High", "Website", "Qualified on budget. Waiting on a stakeholder map."),
@@ -85,27 +87,27 @@ public class WorkspaceSeeder {
                 new Row("Aria Ramos", "Soylent Green", 94000, "Qualified", "High", "Cold Outreach", "Confirmed the problem and the buying group."),
                 new Row("Elena Voss", "Wayne Tech", 140000, "Qualified", "Medium", "Event", "Asked for references in manufacturing."),
                 new Row("Chris Dalton", "Duff Brewing", 122000, "Qualified", "Low", "Social", "Warm intro from an existing customer."),
-                new Row("Chloe Park", "Soylent", 216000, "Proposal", "High", "Website", "Renewal conversation. Likely to expand seats next quarter."),
-                new Row("Owen Mitchell", "Pied Piper", 106000, "Proposal", "High", "Other", "Proposal sent. Procurement is comparing two vendors."),
-                new Row("Ella Brooks", "Stark Industries", 52000, "Proposal", "Medium", "Event", "Waiting on legal redlines."),
-                new Row("Mia Bennett", "Vandelay Industries", 12000, "Proposal", "High", "Social", "Small deal, fast cycle if pricing is approved."),
-                new Row("Liam Ortiz", "Nakatomi", 60000, "Proposal", "Medium", "Cold Outreach", "Asked for a one-page scope before Friday."),
-                new Row("Sofia Reed", "Gringotts", 58000, "Proposal", "High", "Referral", "Security questionnaire is the remaining gate."),
-                new Row("Noah Blake", "Wonka Industries", 56000, "Proposal", "Low", "Website", "Proposal opened twice. No questions yet."),
-                new Row("Ava Park", "Pendant Publishing", 55000, "Proposal", "Medium", "Other", "Comparing on price. Support SLA matters more than features."),
-                new Row("Wyatt Greer", "Gekko & Co", 159000, "Won", "High", "Event", "Closed after a quarterly check-in with the solutions team."),
-                new Row("Olivia Cole", "Spacely Sprockets", 26000, "Won", "High", "Social", "Fast close. Asked for onboarding this month."),
-                new Row("Mia Hale", "Stark Labs", 145000, "Won", "Medium", "Website", "Procurement confirmed budget and signed."),
-                new Row("Henry Foster", "Cyberdyne", 140000, "Won", "High", "Referral", "Won on security review and a fixed onboarding plan."),
-                new Row("Harper Frost", "Tyrell Corp", 120000, "Won", "Medium", "Cold Outreach", "Requested SOC 2, then approved the rollout."),
-                new Row("Jackson Bauer", "Initech", 120000, "Won", "Low", "Event", "Closed after the security document pack."),
+                new Row("Chloe Park", "Soylent", 216000, "Interested", "High", "Website", "Renewal conversation. Likely to expand seats next quarter."),
+                new Row("Owen Mitchell", "Pied Piper", 106000, "Interested", "High", "Other", "Proposal sent. Procurement is comparing two vendors."),
+                new Row("Ella Brooks", "Stark Industries", 52000, "Interested", "Medium", "Event", "Waiting on legal redlines."),
+                new Row("Mia Bennett", "Vandelay Industries", 12000, "Interested", "High", "Social", "Small deal, fast cycle if pricing is approved."),
+                new Row("Liam Ortiz", "Nakatomi", 60000, "Interested", "Medium", "Cold Outreach", "Asked for a one-page scope before Friday."),
+                new Row("Sofia Reed", "Gringotts", 58000, "Interested", "High", "Referral", "Security questionnaire is the remaining gate."),
+                new Row("Noah Blake", "Wonka Industries", 56000, "Interested", "Low", "Website", "Proposal opened twice. No questions yet."),
+                new Row("Ava Park", "Pendant Publishing", 55000, "Interested", "Medium", "Other", "Comparing on price. Support SLA matters more than features."),
+                new Row("Wyatt Greer", "Gekko & Co", 159000, "Converted", "High", "Event", "Closed after a quarterly check-in with the solutions team."),
+                new Row("Olivia Cole", "Spacely Sprockets", 26000, "Converted", "High", "Social", "Fast close. Asked for onboarding this month."),
+                new Row("Mia Hale", "Stark Labs", 145000, "Converted", "Medium", "Website", "Procurement confirmed budget and signed."),
+                new Row("Henry Foster", "Cyberdyne", 140000, "Converted", "High", "Referral", "Won on security review and a fixed onboarding plan."),
+                new Row("Harper Frost", "Tyrell Corp", 120000, "Converted", "Medium", "Cold Outreach", "Requested SOC 2, then approved the rollout."),
+                new Row("Jackson Bauer", "Initech", 120000, "Converted", "Low", "Event", "Closed after the security document pack."),
                 new Row("Chloe Mitchell", "Bluth Company", 154000, "Lost", "Medium", "Event", "Went quiet after the second meeting."),
                 new Row("Amelia Khan", "Umbrella Co", 148000, "Lost", "Medium", "Referral", "Lost on price against an incumbent."),
                 new Row("Derek Cho", "Hooli", 98000, "Lost", "High", "Cold Outreach", "Champion left the company."),
                 new Row("Lila Shah", "Globex", 86000, "Lost", "Low", "Social", "No executive sponsor."),
                 new Row("Ben Carter", "Wayne Enterprises", 82000, "Lost", "Medium", "Website", "Project paused until next fiscal year."),
-                new Row("Nora Kim", "Duff Brewing", 72000, "Lost", "High", "Event", "Chose to stay with spreadsheets for now."),
-                new Row("Owen Blake", "Nakatomi", 60000, "Lost", "Low", "Other", "Timing was wrong. Asked to reconnect in two quarters.")
+                new Row("Nora Kim", "Duff Brewing", 72000, "Not Interested", "High", "Event", "Chose to stay with spreadsheets for now."),
+                new Row("Owen Blake", "Nakatomi", 60000, "Junk", "Low", "Other", "Timing was wrong. Asked to reconnect in two quarters.")
         );
         int[] months = {
                 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3,
@@ -145,18 +147,19 @@ public class WorkspaceSeeder {
             } else {
                 lead.setUpdatedAt(Instant.now().minus(2 + (i % 12), ChronoUnit.DAYS));
             }
-            if ("Won".equals(row.stage())) {
+            if (Catalog.isWon(row.stage())) {
                 lead.setClosedAt(wonClosed(won++));
                 lead.setCloseReason(List.of("Product fit", "Relationship", "Speed", "Referral", "Price", "Other").get(i % 6));
                 lead.setCloseNote(row.notes());
-            } else if ("Lost".equals(row.stage())) {
+            } else if (Catalog.isExit(row.stage())) {
                 lead.setClosedAt(Instant.now().minus(20L + i, ChronoUnit.DAYS));
-                lead.setCloseReason(List.of("Price", "Competitor", "Timing", "No sponsor", "No budget", "Other").get(i % 6));
+                List<String> reasons = Catalog.reasonsFor(row.stage());
+                lead.setCloseReason(reasons.get(i % reasons.size()));
                 lead.setCloseNote(row.notes());
             }
             leads.save(lead);
             activities.logAt(lead, owner.getName(), "created", "Lead added", row.notes(), lead.getCreatedAt());
-            if ("Won".equals(row.stage()) || "Lost".equals(row.stage())) {
+            if (!Catalog.isOpen(row.stage())) {
                 activities.logAt(lead, owner.getName(), "stage", "Moved to " + row.stage(),
                         "New → " + row.stage() + " · " + lead.getCloseReason(), lead.getClosedAt());
             }
@@ -266,7 +269,7 @@ public class WorkspaceSeeder {
                 new T("Send proposal recap to Pied Piper", "Restate scope, price, and the open questions.", "2026-07-02", "Medium", "Pending", "Owen Mitchell"),
                 new T("Intro security review for Nakatomi", "SSO and SCIM timeline before a verbal commit.", "2026-08-15", "High", "In Progress", "Noah Khan"),
                 new T("Confirm Q4 budget with Soylent", "Ask Chloe for the seat count and signature path.", "2026-09-28", "High", "Pending", "Chloe Park"),
-                new T("Demo for Aperture Labs", "Lead with pipeline health and the email co-pilot.", "2026-10-02", "Medium", "Pending", "Evelyn Diaz"),
+                new T("Demo for Aperture Labs", "Walk through pipeline health and follow-ups.", "2026-10-02", "Medium", "Pending", "Evelyn Diaz"),
                 new T("Renewal prep for Globex", "Pull the last three notes before the call.", "2026-10-08", "Low", "Pending", "Zoe Diaz"),
                 new T("Contract redlines with Dunder Mifflin", "Finance wants a cleaner payment schedule.", "2026-10-15", "High", "In Progress", "Felix Khan"),
                 new T("Kickoff with Gekko & Co", "Onboarding agenda and success metrics.", "2026-09-02", "Medium", "Completed", "Wyatt Greer"),

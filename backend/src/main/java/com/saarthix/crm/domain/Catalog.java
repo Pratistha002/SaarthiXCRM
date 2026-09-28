@@ -5,7 +5,11 @@ import java.util.Map;
 import java.util.Set;
 
 public final class Catalog {
-    public static final List<String> STAGES = List.of("New", "Qualified", "Proposal", "Won", "Lost");
+    public static final String CONVERTED = "Converted";
+    public static final List<String> FUNNEL = List.of(
+            "New", "Attempted Contact", "Contacted", "Interested", "Qualified", CONVERTED);
+    public static final List<String> EXITS = List.of("Junk", "Not Interested", "Lost");
+    public static final List<String> STAGES = java.util.stream.Stream.concat(FUNNEL.stream(), EXITS.stream()).toList();
     public static final List<String> PRIORITIES = List.of("High", "Medium", "Low");
     public static final List<String> LEAD_TYPES = List.of("Student", "Institute", "Industry");
     public static final List<String> SOURCES = List.of(
@@ -19,14 +23,42 @@ public final class Catalog {
     public static final List<String> ROLES = List.of(HEAD_OF_SALES, SALES_EXECUTIVE);
     public static final List<String> WON_REASONS = List.of(
             "Price", "Product fit", "Relationship", "Speed", "Referral", "Other");
+    public static final List<String> JUNK_REASONS = List.of(
+            "Invalid contact details", "Duplicate", "Spam / fake", "Test entry", "Other");
+    public static final List<String> NOT_INTERESTED_REASONS = List.of(
+            "No requirement", "Too expensive", "Chose another option", "Bad timing", "Other");
     public static final List<String> LOST_REASONS = List.of(
-            "Price", "Competitor", "Timing", "No sponsor", "No budget", "Other");
+            "Price", "Competitor", "Timing", "No response", "No budget", "Other");
+    public static final List<String> EXIT_REASONS = java.util.stream.Stream
+            .of(JUNK_REASONS, NOT_INTERESTED_REASONS, LOST_REASONS)
+            .flatMap(List::stream).distinct().toList();
     public static final Map<String, Integer> WEIGHTS = Map.of(
-            "New", 15,
-            "Qualified", 40,
-            "Proposal", 70,
-            "Won", 100,
+            "New", 5,
+            "Attempted Contact", 10,
+            "Contacted", 20,
+            "Interested", 40,
+            "Qualified", 60,
+            CONVERTED, 100,
+            "Junk", 0,
+            "Not Interested", 0,
             "Lost", 0);
+    public static final String CONNECTED = "Connected";
+    public static final List<String> CALL_OUTCOMES = List.of(
+            CONNECTED, "No Answer", "Busy", "Wrong Number", "Call Back Later");
+    public static final List<String> CALL_RESPONSES = List.of(
+            "Interested", "Not Interested", "Needs More Information", "Wants Demo", "Wants Proposal",
+            "Call Back Later", "Other");
+    public static final String NO_FURTHER_ACTION = "No Further Action";
+    public static final List<String> TASK_TYPES = List.of(
+            "Call", "Follow-up", "Meeting", "Demo", "Send Proposal", "Email", "WhatsApp");
+    public static final Map<String, Integer> REMINDER_MINUTES = Map.of(
+            "None", 0,
+            "15 minutes before", 15,
+            "1 hour before", 60,
+            "1 day before", 1440);
+    public static final Map<String, String> LEGACY_STAGES = Map.of(
+            "Proposal", "Interested",
+            "Won", CONVERTED);
 
     private Catalog() {
     }
@@ -76,7 +108,26 @@ public final class Catalog {
     }
 
     public static boolean isOpen(String stage) {
-        return !Set.of("Won", "Lost").contains(stage);
+        return !isWon(stage) && !isExit(stage);
+    }
+
+    public static boolean isWon(String stage) {
+        return CONVERTED.equals(stage);
+    }
+
+    public static boolean isExit(String stage) {
+        return EXITS.contains(stage);
+    }
+
+    public static List<String> reasonsFor(String stage) {
+        if (stage == null) return List.of();
+        return switch (stage) {
+            case CONVERTED -> WON_REASONS;
+            case "Junk" -> JUNK_REASONS;
+            case "Not Interested" -> NOT_INTERESTED_REASONS;
+            case "Lost" -> LOST_REASONS;
+            default -> List.of();
+        };
     }
 
     public static int weight(String stage) {

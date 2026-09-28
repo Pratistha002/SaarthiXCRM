@@ -1,7 +1,11 @@
 package com.saarthix.crm.web;
 
+import com.saarthix.crm.model.Activity;
 import com.saarthix.crm.model.Attachment;
+import com.saarthix.crm.model.FollowUp;
 import com.saarthix.crm.model.Lead;
+import com.saarthix.crm.service.CallService;
+import com.saarthix.crm.service.FollowUpService;
 import com.saarthix.crm.service.LeadDetailService;
 import com.saarthix.crm.service.LeadService;
 import jakarta.validation.Valid;
@@ -16,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -23,15 +28,39 @@ import java.util.Map;
 public class LeadController {
     private final LeadService leads;
     private final LeadDetailService details;
+    private final CallService calls;
+    private final FollowUpService followUps;
 
-    public LeadController(LeadService leads, LeadDetailService details) {
+    public LeadController(LeadService leads, LeadDetailService details, CallService calls, FollowUpService followUps) {
         this.leads = leads;
         this.details = details;
+        this.calls = calls;
+        this.followUps = followUps;
     }
 
     @GetMapping("/{id}/related")
     public Map<String, Object> related(@PathVariable String id) {
         return details.related(id);
+    }
+
+    @PostMapping("/{id}/activities/call")
+    public Map<String, Object> logCall(@PathVariable String id, @RequestBody CallService.CallRequest request) {
+        return calls.log(id, request);
+    }
+
+    @GetMapping("/{id}/activities")
+    public Map<String, Object> activities(@PathVariable String id) {
+        return details.activitiesFor(id);
+    }
+
+    @PostMapping("/{id}/tasks")
+    public FollowUp createTask(@PathVariable String id, @Valid @RequestBody FollowUpService.TaskRequest request) {
+        return followUps.createForLead(id, request);
+    }
+
+    @GetMapping("/{id}/timeline")
+    public List<Activity> timeline(@PathVariable String id) {
+        return details.timeline(id);
     }
 
     @PutMapping("/{id}/tags")
@@ -98,7 +127,7 @@ public class LeadController {
         return leads.update(id, request, force);
     }
 
-    @PatchMapping("/{id}/stage")
+    @PatchMapping({"/{id}/stage", "/{id}/status"})
     public Lead stage(@PathVariable String id, @Valid @RequestBody LeadService.StageRequest request) {
         return leads.move(id, request);
     }

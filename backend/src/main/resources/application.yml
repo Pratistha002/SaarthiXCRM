@@ -24,9 +24,6 @@ app:
     expiration-ms: 86400000
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5175,http://127.0.0.1:5175}
-  gemini:
-    api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-2.0-flash}
   mail:
     from: ${APP_MAIL_FROM:}
     from-name: ${APP_MAIL_FROM_NAME:SaarthiX CRM}

@@ -2,7 +2,6 @@ package com.saarthix.crm.service;
 
 import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.domain.DuplicateLeadException;
-import com.saarthix.crm.domain.LeadScore;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.repo.AttachmentRepository;
@@ -295,13 +294,13 @@ public class LeadService {
     private void applyClose(Lead lead, String stage, String reason, String note) {
         boolean closing = !Catalog.isOpen(stage);
         if (closing) {
-            List<String> allowed = "Won".equals(stage) ? Catalog.WON_REASONS : Catalog.LOST_REASONS;
-            if (reason == null || reason.isBlank()) {
+            boolean blankReason = reason == null || reason.isBlank();
+            if (blankReason && Catalog.isExit(stage)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Pick a " + stage.toLowerCase(Locale.ROOT) + " reason so the team can see why the number moved");
+                        "Pick a reason for marking this lead " + stage.toLowerCase(Locale.ROOT));
             }
-            Catalog.require(reason, allowed, stage + " reason");
-            lead.setCloseReason(reason);
+            if (!blankReason) Catalog.require(reason, Catalog.reasonsFor(stage), stage + " reason");
+            lead.setCloseReason(blankReason ? "" : reason);
             lead.setCloseNote(note == null ? "" : note.trim());
             if (lead.getClosedAt() == null || !stage.equals(lead.getStage())) {
                 lead.setClosedAt(Instant.now());
@@ -349,7 +348,6 @@ public class LeadService {
     }
 
     private void decorate(Lead lead) {
-        lead.setScore(LeadScore.of(lead));
         lead.setWeight(Catalog.weight(lead.getStage()));
         lead.setWeightedValue(Catalog.weighted(lead.getValue(), lead.getStage()));
         if (lead.getOwnerName() == null || lead.getOwnerName().isBlank()) {
@@ -360,7 +358,7 @@ public class LeadService {
     private Map<String, Object> summary(List<Lead> all) {
         long totalValue = all.stream().mapToLong(Lead::getValue).sum();
         long open = all.stream().filter(l -> Catalog.isOpen(l.getStage())).mapToLong(Lead::getValue).sum();
-        long won = all.stream().filter(l -> "Won".equals(l.getStage())).mapToLong(Lead::getValue).sum();
+        long won = all.stream().filter(l -> Catalog.isWon(l.getStage())).mapToLong(Lead::getValue).sum();
         long forecast = all.stream().mapToLong(l -> Catalog.weighted(l.getValue(), l.getStage())).sum();
         long count = all.size();
         Map<String, Long> stages = new HashMap<>();
@@ -370,9 +368,9 @@ public class LeadService {
         Map<String, Long> wonReasons = new LinkedHashMap<>();
         Map<String, Long> lostReasons = new LinkedHashMap<>();
         Catalog.WON_REASONS.forEach(reason -> wonReasons.put(reason,
-                all.stream().filter(l -> "Won".equals(l.getStage()) && reason.equals(l.getCloseReason())).count()));
-        Catalog.LOST_REASONS.forEach(reason -> lostReasons.put(reason,
-                all.stream().filter(l -> "Lost".equals(l.getStage()) && reason.equals(l.getCloseReason())).count()));
+                all.stream().filter(l -> Catalog.isWon(l.getStage()) && reason.equals(l.getCloseReason())).count()));
+        Catalog.EXIT_REASONS.forEach(reason -> lostReasons.put(reason,
+                all.stream().filter(l -> Catalog.isExit(l.getStage()) && reason.equals(l.getCloseReason())).count()));
         return Map.of(
                 "total", count,
                 "totalValue", totalValue,
@@ -397,7 +395,7 @@ public class LeadService {
     }
 
     private String defaultReason(String stage) {
-        return "Won".equals(stage) ? "Other" : "Lost".equals(stage) ? "Other" : "";
+        return Catalog.isExit(stage) ? "Other" : "";
     }
 
     private Comparator<Lead> sorter(String sort) {

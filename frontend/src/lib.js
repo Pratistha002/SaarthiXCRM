@@ -1,12 +1,16 @@
-export const STAGES = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
+export const FUNNEL_STAGES = ['New', 'Attempted Contact', 'Contacted', 'Interested', 'Qualified', 'Converted'];
+export const EXIT_STAGES = ['Junk', 'Not Interested', 'Lost'];
+export const STAGES = [...FUNNEL_STAGES, ...EXIT_STAGES];
 export const PRIORITIES = ['High', 'Medium', 'Low'];
 export const SOURCES = ['Cold Outreach', 'Event', 'Social', 'Website', 'Other', 'Referral'];
-export const PURPOSES = ['Follow-up', 'Introduction', 'Proposal', 'Check-in', 'Closing'];
-export const TONES = ['Formal', 'Friendly', 'Concise', 'Persuasive'];
 export const ROLES = ['HEAD_OF_SALES', 'SALES_EXECUTIVE'];
 export const WON_REASONS = ['Price', 'Product fit', 'Relationship', 'Speed', 'Referral', 'Other'];
-export const LOST_REASONS = ['Price', 'Competitor', 'Timing', 'No sponsor', 'No budget', 'Other'];
-export const WEIGHTS = { New: 15, Qualified: 40, Proposal: 70, Won: 100, Lost: 0 };
+export const LOST_REASONS = ['Price', 'Competitor', 'Timing', 'No response', 'No budget', 'Other'];
+export const JUNK_REASONS = ['Invalid contact details', 'Duplicate', 'Spam / fake', 'Test entry', 'Other'];
+export const NOT_INTERESTED_REASONS = ['No requirement', 'Too expensive', 'Chose another option', 'Bad timing', 'Other'];
+export const WEIGHTS = {
+  New: 5, 'Attempted Contact': 10, Contacted: 20, Interested: 40, Qualified: 60, Converted: 100, Junk: 0, 'Not Interested': 0, Lost: 0,
+};
 export const LEAD_TYPES = ['Student', 'Institute', 'Industry'];
 export const SALUTATIONS = ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'];
 export const INDUSTRIES = [
@@ -33,22 +37,80 @@ export const STATES = {
 };
 
 export function closeReasons(stage) {
-  return stage === 'Lost' ? LOST_REASONS : WON_REASONS;
+  if (stage === 'Junk') return JUNK_REASONS;
+  if (stage === 'Not Interested') return NOT_INTERESTED_REASONS;
+  if (stage === 'Lost') return LOST_REASONS;
+  if (stage === 'Converted') return WON_REASONS;
+  return [];
+}
+
+export function isExitStage(stage) {
+  return EXIT_STAGES.includes(stage);
+}
+
+export const CALL_OUTCOMES = ['Connected', 'No Answer', 'Busy', 'Wrong Number', 'Call Back Later'];
+export const CALL_RESPONSES = ['Interested', 'Not Interested', 'Needs More Information', 'Wants Demo', 'Wants Proposal', 'Call Back Later', 'Other'];
+export const NO_FURTHER_ACTION = 'No Further Action';
+export const NEXT_ACTIONS = [NO_FURTHER_ACTION, 'Call', 'Follow-up', 'Meeting', 'Demo', 'Send Proposal', 'Email', 'WhatsApp'];
+export const REMINDERS = ['None', '15 minutes before', '1 hour before', '1 day before'];
+
+export function primaryPhone(lead) {
+  return (lead?.phone || lead?.mobile || '').trim();
+}
+
+export function isDialable(phone) {
+  return /^\+?\d{7,15}$/.test((phone || '').replace(/[\s().-]/g, ''));
+}
+
+const CALL_STAGE = {
+  'No Answer': 'Attempted Contact',
+  Busy: 'Attempted Contact',
+  'Wrong Number': 'Junk',
+  'Call Back Later': 'Contacted',
+};
+
+const RESPONSE_STAGE = {
+  Interested: 'Interested',
+  'Not Interested': 'Not Interested',
+  'Needs More Information': 'Contacted',
+  'Wants Demo': 'Interested',
+  'Wants Proposal': 'Qualified',
+  'Call Back Later': 'Contacted',
+  Other: 'Contacted',
+};
+
+export const CALL_EXIT_REASON = { Junk: 'Invalid contact details', 'Not Interested': 'No requirement' };
+
+/** Suggests a status from the call result without ever moving a lead backwards in the funnel. */
+export function suggestStage(outcome, response, current) {
+  const target = outcome === 'Connected' ? RESPONSE_STAGE[response] : CALL_STAGE[outcome];
+  if (!target || current === 'Converted') return current;
+  if (isExitStage(current) && outcome !== 'Connected') return current;
+  if (isExitStage(target) || isExitStage(current)) return target;
+  return FUNNEL_STAGES.indexOf(current) >= FUNNEL_STAGES.indexOf(target) ? current : target;
 }
 
 export const stageStyle = {
   New: 'bg-blue-50 text-blue-600',
+  'Attempted Contact': 'bg-cyan-50 text-cyan-700',
+  Contacted: 'bg-indigo-50 text-indigo-600',
+  Interested: 'bg-amber-50 text-amber-600',
   Qualified: 'bg-violet-50 text-violet-600',
-  Proposal: 'bg-orange-50 text-orange-500',
-  Won: 'bg-sky-50 text-sky-600',
+  Converted: 'bg-emerald-50 text-emerald-600',
+  Junk: 'bg-slate-100 text-slate-500',
+  'Not Interested': 'bg-orange-50 text-orange-600',
   Lost: 'bg-rose-50 text-rose-500',
 };
 
 export const stageDot = {
   New: '#2f80ed',
+  'Attempted Contact': '#06b6d4',
+  Contacted: '#6366f1',
+  Interested: '#f2994a',
   Qualified: '#7b61ff',
-  Proposal: '#f2994a',
-  Won: '#2d9cdb',
+  Converted: '#10b981',
+  Junk: '#94a3b8',
+  'Not Interested': '#f97316',
   Lost: '#eb5757',
 };
 
@@ -114,6 +176,7 @@ export function dueLabel(day) {
 
 export function isOverdue(task) {
   if (!task || task.status === 'Completed' || !task.dueDate) return false;
+  if (task.dueAt) return new Date(task.dueAt) < new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(`${task.dueDate}T00:00:00`) < today;

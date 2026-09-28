@@ -51,9 +51,9 @@ public class TeamService {
         for (User user : users.findByWorkspaceId(me.getWorkspaceId())) {
             List<Lead> owned = all.stream().filter(l -> user.getId().equals(l.getOwnerId())).toList();
             long open = owned.stream().filter(l -> Catalog.isOpen(l.getStage())).mapToLong(Lead::getValue).sum();
-            long won = owned.stream().filter(l -> "Won".equals(l.getStage())).mapToLong(Lead::getValue).sum();
-            long wonCount = owned.stream().filter(l -> "Won".equals(l.getStage())).count();
-            long lostCount = owned.stream().filter(l -> "Lost".equals(l.getStage())).count();
+            long won = owned.stream().filter(l -> Catalog.isWon(l.getStage())).mapToLong(Lead::getValue).sum();
+            long wonCount = owned.stream().filter(l -> Catalog.isWon(l.getStage())).count();
+            long lostCount = owned.stream().filter(l -> Catalog.isExit(l.getStage())).count();
             long decided = wonCount + lostCount;
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", user.getId());

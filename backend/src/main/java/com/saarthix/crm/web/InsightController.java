@@ -9,10 +9,12 @@ import com.saarthix.crm.repo.LeadRepository;
 import com.saarthix.crm.repo.NoteRepository;
 import com.saarthix.crm.repo.NotificationRepository;
 import com.saarthix.crm.security.Scope;
-import com.saarthix.crm.service.AiService;
+import com.saarthix.crm.service.ActivityService;
 import com.saarthix.crm.service.DashboardService;
+import com.saarthix.crm.service.MailService;
 import com.saarthix.crm.service.ReminderService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,7 +32,8 @@ import java.util.Map;
 @RestController
 public class InsightController {
     private final DashboardService dashboard;
-    private final AiService ai;
+    private final MailService mail;
+    private final ActivityService activities;
     private final ReminderService reminders;
     private final NotificationRepository notifications;
     private final LeadRepository leads;
@@ -38,11 +41,12 @@ public class InsightController {
     private final NoteRepository notes;
     private final Scope scope;
 
-    public InsightController(DashboardService dashboard, AiService ai, ReminderService reminders,
-                             NotificationRepository notifications, LeadRepository leads,
+    public InsightController(DashboardService dashboard, MailService mail, ActivityService activities,
+                             ReminderService reminders, NotificationRepository notifications, LeadRepository leads,
                              ContactRepository contacts, NoteRepository notes, Scope scope) {
         this.dashboard = dashboard;
-        this.ai = ai;
+        this.mail = mail;
+        this.activities = activities;
         this.reminders = reminders;
         this.notifications = notifications;
         this.leads = leads;
@@ -56,34 +60,19 @@ public class InsightController {
         return dashboard.snapshot();
     }
 
-    @PostMapping("/api/ai/email")
-    public Map<String, Object> email(@Valid @RequestBody AiService.EmailRequest request) {
-        return ai.email(request);
-    }
-
-    @PostMapping("/api/ai/email/send")
-    public Map<String, Object> send(@Valid @RequestBody AiService.SendRequest request) {
-        return ai.send(request);
-    }
-
     @GetMapping("/api/mail/status")
     public Map<String, Object> mailStatus() {
-        return ai.mailStatus();
+        return Map.of("configured", mail.configured(), "inboxUrl", mail.inboxUrl());
     }
 
-    @PostMapping("/api/ai/summary")
-    public Map<String, Object> summary(@Valid @RequestBody AiService.IdRequest request) {
-        return ai.summary(request);
-    }
-
-    @PostMapping("/api/ai/next-step")
-    public Map<String, Object> next(@Valid @RequestBody AiService.IdRequest request) {
-        return ai.nextStep(request);
-    }
-
-    @PostMapping("/api/ai/pipeline")
-    public Map<String, Object> pipeline() {
-        return ai.pipeline();
+    @PostMapping("/api/mail/send")
+    public Map<String, Object> send(@Valid @RequestBody SendRequest request) {
+        Lead lead = leads.findById(request.leadId())
+                .filter(item -> scope.sameWorkspace(item.getWorkspaceId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        mail.send(lead.getEmail(), request.subject(), request.body(), scope.user().getEmail());
+        activities.log(lead, scope.user(), "email", "Email sent: " + request.subject(), request.body());
+        return Map.of("sent", true, "to", lead.getEmail(), "subject", request.subject());
     }
 
     @PostMapping("/api/reminders/run")
@@ -139,5 +128,11 @@ public class InsightController {
 
     private boolean contains(String value, String query) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    public record SendRequest(
+            @NotBlank String leadId,
+            @NotBlank(message = "Subject is required") String subject,
+            @NotBlank(message = "Write the email before sending") String body) {
     }
 }

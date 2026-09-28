@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ApiError, api } from '../api';
 import {
-  COUNTRIES, LEAD_TYPES, PRIORITIES, RATINGS, SOURCES, STAGES, STATES, closeReasons, cx,
+  COUNTRIES, EXIT_STAGES, FUNNEL_STAGES, LEAD_TYPES, PRIORITIES, RATINGS, SOURCES, STATES, closeReasons, cx, isExitStage,
 } from '../lib';
 import { Banner, Spinner } from '../ui';
 
@@ -153,8 +153,13 @@ export default function LeadForm({ lead, members, user, onCancel, onSaved }) {
       case 'stage':
         return (
           <Row key={key} label="Lead Status">
-            <select className={input()} value={form.stage} onChange={set('stage')}>
-              {STAGES.map((item) => <option key={item}>{item}</option>)}
+            <select className={input()} value={form.stage} onChange={(event) => setForm({ ...form, stage: event.target.value, closeReason: '' })}>
+              <optgroup label="Pipeline">
+                {FUNNEL_STAGES.map((item) => <option key={item}>{item}</option>)}
+              </optgroup>
+              <optgroup label="Exit states">
+                {EXIT_STAGES.map((item) => <option key={item}>{item}</option>)}
+              </optgroup>
             </select>
           </Row>
         );
@@ -219,10 +224,10 @@ export default function LeadForm({ lead, members, user, onCancel, onSaved }) {
           <h2 className="mb-5 font-semibold text-slate-800">Lead Information</h2>
           <div className="grid gap-x-12 gap-y-4 lg:grid-cols-2">
             {visible.map(renderField)}
-            {type && (form.stage === 'Won' || form.stage === 'Lost') && (
+            {type && closeReasons(form.stage).length > 0 && (
               <>
-                <Row label={`${form.stage} Reason`} required>
-                  <select className={input(true)} required value={form.closeReason} onChange={set('closeReason')}>
+                <Row label={`${form.stage} Reason`} required={isExitStage(form.stage)}>
+                  <select className={input(isExitStage(form.stage))} required={isExitStage(form.stage)} value={form.closeReason} onChange={set('closeReason')}>
                     <option value="">-None-</option>
                     {closeReasons(form.stage).map((item) => <option key={item}>{item}</option>)}
                   </select>
