@@ -138,6 +138,9 @@ export default function Shell({ children }) {
                       {unread > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
                     </button>
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/notes'); }}>Notes</button>
+                    {user?.platformAdmin && (
+                      <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/admin'); }}>Admin console</button>
+                    )}
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/team'); }}>Team</button>
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setEditing(true); }}>Edit profile</button>
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>

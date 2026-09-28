@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { Logo } from '../ui';
@@ -13,13 +13,15 @@ const POINTS = [
 export default function Login() {
   const { user, save } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const next = params.get('next') || '';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={next === '/admin' ? '/admin' : '/dashboard'} replace />;
 
   async function submit(event) {
     event.preventDefault();
@@ -28,7 +30,7 @@ export default function Login() {
     try {
       const auth = await api('/api/auth/login', { method: 'POST', body: { email, password } });
       save(auth);
-      navigate('/dashboard', { state: { welcome: true } });
+      navigate(next === '/admin' ? '/admin' : '/dashboard', { state: { welcome: true } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -45,7 +47,7 @@ export default function Login() {
         body: { email: 'alex@saarthix.com', password: 'Demo@123' },
       });
       save(auth);
-      navigate('/dashboard', { state: { welcome: true } });
+      navigate(next === '/admin' ? '/admin' : '/dashboard', { state: { welcome: true } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -58,7 +60,7 @@ export default function Login() {
       <section className="relative hidden overflow-hidden bg-gradient-to-br from-[#1c86e0] via-[#1674cb] to-[#0e5ea8] px-14 py-10 text-white lg:flex lg:flex-col">
         <div className="pointer-events-none absolute -left-20 top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute bottom-10 right-0 h-64 w-64 rounded-full bg-sky-300/20 blur-3xl" />
-        <Logo light />
+        <Link to="/"><Logo light /></Link>
         <div className="my-auto max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.15] tracking-tight">
             Close more deals with an AI co-pilot in your pipeline.
@@ -80,7 +82,7 @@ export default function Login() {
       </section>
       <section className="flex items-center justify-center bg-white px-6 py-12">
         <form onSubmit={submit} className="w-full max-w-[420px]">
-          <div className="mb-8 lg:hidden"><Logo /></div>
+          <div className="mb-8 lg:hidden"><Link to="/"><Logo /></Link></div>
           <h2 className="text-[28px] font-semibold tracking-tight">Welcome back</h2>
           <p className="mt-1 text-sm text-slate-500">Sign in to your SaarthiX workspace.</p>
           <label className="mt-8 block text-sm font-medium">Email

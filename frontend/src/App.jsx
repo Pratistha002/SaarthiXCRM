@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
 import Shell from './Shell';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Admin from './pages/Admin';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Pipeline from './pages/Pipeline';
@@ -20,8 +22,10 @@ function Private({ children }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/admin" element={<Admin />} />
       <Route path="/dashboard" element={<Private><Dashboard /></Private>} />
       <Route path="/leads" element={<Private><Leads /></Private>} />
       <Route path="/pipeline" element={<Private><Pipeline /></Private>} />
@@ -29,7 +33,7 @@ export default function App() {
       <Route path="/notes" element={<Private><Notes /></Private>} />
       <Route path="/follow-ups" element={<Private><FollowUps /></Private>} />
       <Route path="/team" element={<Private><Team /></Private>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

@@ -1,7 +1,9 @@
 package com.saarthix.crm.service;
 
+import com.saarthix.crm.model.LoginEvent;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.model.Workspace;
+import com.saarthix.crm.repo.LoginEventRepository;
 import com.saarthix.crm.repo.UserRepository;
 import com.saarthix.crm.repo.WorkspaceRepository;
 import com.saarthix.crm.security.CurrentUser;
@@ -28,15 +30,17 @@ public class AuthService {
     private final JwtService jwt;
     private final CurrentUser current;
     private final ReminderService reminders;
+    private final LoginEventRepository logins;
 
     public AuthService(UserRepository users, WorkspaceRepository workspaces, PasswordEncoder encoder,
-                       JwtService jwt, CurrentUser current, ReminderService reminders) {
+                       JwtService jwt, CurrentUser current, ReminderService reminders, LoginEventRepository logins) {
         this.users = users;
         this.workspaces = workspaces;
         this.encoder = encoder;
         this.jwt = jwt;
         this.current = current;
         this.reminders = reminders;
+        this.logins = logins;
     }
 
     public Map<String, Object> register(RegisterRequest request) {
@@ -68,6 +72,7 @@ public class AuthService {
             user.setRole("ADMIN");
         }
         users.save(user);
+        recordLogin(user);
         return token(user);
     }
 
@@ -77,6 +82,7 @@ public class AuthService {
         if (!encoder.matches(request.password(), user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
+        recordLogin(user);
         reminders.runForUser(user);
         return token(user);
     }
@@ -140,7 +146,25 @@ public class AuthService {
         body.put("workspaceId", user.getWorkspaceId() == null ? "" : user.getWorkspaceId());
         body.put("workspaceName", workspaces.findById(user.getWorkspaceId() == null ? "" : user.getWorkspaceId())
                 .map(Workspace::getName).orElse(""));
+        body.put("platformAdmin", user.isPlatformAdmin());
+        body.put("lastLoginAt", user.getLastLoginAt());
         return body;
+    }
+
+    private void recordLogin(User user) {
+        Instant now = Instant.now();
+        user.setLastLoginAt(now);
+        user.setLoginCount(user.getLoginCount() + 1);
+        users.save(user);
+        LoginEvent event = new LoginEvent();
+        event.setUserId(user.getId());
+        event.setName(user.getName());
+        event.setEmail(user.getEmail());
+        event.setWorkspaceId(user.getWorkspaceId());
+        event.setWorkspaceName(workspaces.findById(user.getWorkspaceId() == null ? "" : user.getWorkspaceId())
+                .map(Workspace::getName).orElse(""));
+        event.setCreatedAt(now);
+        logins.save(event);
     }
 
     public record LoginRequest(

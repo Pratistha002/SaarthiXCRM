@@ -32,7 +32,7 @@ export default function Register() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <section className="relative hidden bg-gradient-to-br from-[#1c86e0] via-[#1674cb] to-[#0e5ea8] px-14 py-10 text-white lg:flex lg:flex-col">
-        <Logo light />
+        <Link to="/"><Logo light /></Link>
         <div className="my-auto max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.15] tracking-tight">A workspace your sales team can run every day.</h1>
           <p className="mt-6 text-white/85">Create a company workspace, or enter a teammate&apos;s invite code and land in the same pipeline.</p>
@@ -40,9 +40,9 @@ export default function Register() {
       </section>
       <section className="flex items-center justify-center bg-white px-6 py-12">
         <form onSubmit={submit} className="w-full max-w-[420px]">
-          <div className="mb-8 lg:hidden"><Logo /></div>
-          <h2 className="text-[28px] font-semibold tracking-tight">Create your workspace</h2>
-          <p className="mt-1 text-sm text-slate-500">It takes a minute. You can invite the rest of the team later.</p>
+          <div className="mb-8 lg:hidden"><Link to="/"><Logo /></Link></div>
+          <h2 className="text-[28px] font-semibold tracking-tight">Welcome</h2>
+          <p className="mt-1 text-sm text-slate-500">Create your SaarthiX workspace and start selling.</p>
           {[
             ['name', 'Name', 'Alex Morgan', 'text'],
             ['email', 'Email', 'you@company.com', 'email'],

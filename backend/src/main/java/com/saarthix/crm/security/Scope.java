@@ -37,6 +37,14 @@ public class Scope {
         return user;
     }
 
+    public User requirePlatformAdmin() {
+        User user = user();
+        if (!user.isPlatformAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a platform admin can view all teams");
+        }
+        return user;
+    }
+
     public boolean sameWorkspace(String workspaceId) {
         return workspaceId != null && workspaceId.equals(workspaceId());
     }
