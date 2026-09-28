@@ -13,7 +13,7 @@ const FEATURES = [
   ['Visual pipeline', 'Drag deals across New, Qualified, Proposal, Won and Lost without losing the story.'],
   ['Lead activity', 'See every movement, owner and deal value in one activity table your team can act on.'],
   ['Follow-ups', 'Upcoming tasks sit on the dashboard so nothing slips past the next call.'],
-  ['AI insights', 'Ask the co-pilot for a pipeline read, email drafts and the next best step.'],
+  ['Shared team workspace', 'Invite teammates, assign owners, and keep one pipeline everyone can see.'],
 ];
 
 export default function Home() {
@@ -56,7 +56,7 @@ export default function Home() {
             <div>
               <p className="text-sm font-medium text-blue-600">SaarthiX CRM for sales teams</p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl sm:leading-[1.15]">
-                Close more deals with an AI co-pilot in your pipeline.
+                Close more deals with a pipeline your team can actually run.
               </h1>
               <p className="mt-5 max-w-lg text-base leading-relaxed text-slate-500">
                 One workspace for leads, contacts, notes and follow-ups — then a live dashboard that shows pipeline value, engagement and what to do next.

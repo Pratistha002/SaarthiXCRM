@@ -2,7 +2,6 @@ package com.saarthix.crm.service;
 
 import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.domain.DuplicateLeadException;
-import com.saarthix.crm.domain.LeadScore;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.repo.AttachmentRepository;
@@ -349,7 +348,6 @@ public class LeadService {
     }
 
     private void decorate(Lead lead) {
-        lead.setScore(LeadScore.of(lead));
         lead.setWeight(Catalog.weight(lead.getStage()));
         lead.setWeightedValue(Catalog.weighted(lead.getValue(), lead.getStage()));
         if (lead.getOwnerName() == null || lead.getOwnerName().isBlank()) {

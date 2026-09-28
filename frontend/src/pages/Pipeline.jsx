@@ -9,7 +9,6 @@ export default function Pipeline() {
   const [leads, setLeads] = useState([]);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
-  const [hint, setHint] = useState({});
   const [dragOver, setDragOver] = useState('');
   const [closing, setClosing] = useState(null);
 
@@ -42,16 +41,6 @@ export default function Pipeline() {
     } catch (err) {
       setError(err.message);
       await load();
-    }
-  }
-
-  async function suggest(lead) {
-    setHint((current) => ({ ...current, [lead.id]: 'Thinking…' }));
-    try {
-      const result = await api('/api/ai/next-step', { method: 'POST', body: { leadId: lead.id } });
-      setHint((current) => ({ ...current, [lead.id]: result.suggestion }));
-    } catch (err) {
-      setHint((current) => ({ ...current, [lead.id]: err.message }));
     }
   }
 
@@ -123,8 +112,6 @@ export default function Pipeline() {
                       <span className="text-sm font-semibold">{money(lead.value)}</span>
                       <PriorityPill value={lead.priority} />
                     </div>
-                    <button type="button" className="mt-3 text-xs font-medium text-blue-600" onClick={() => suggest(lead)}>✦ AI suggest next step</button>
-                    {hint[lead.id] && <p className="mt-2 text-xs leading-relaxed text-slate-500">{hint[lead.id]}</p>}
                   </article>
                 ))}
               </div>

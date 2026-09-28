@@ -1,8 +1,6 @@
 export const STAGES = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
 export const PRIORITIES = ['High', 'Medium', 'Low'];
 export const SOURCES = ['Cold Outreach', 'Event', 'Social', 'Website', 'Other', 'Referral'];
-export const PURPOSES = ['Follow-up', 'Introduction', 'Proposal', 'Check-in', 'Closing'];
-export const TONES = ['Formal', 'Friendly', 'Concise', 'Persuasive'];
 export const ROLES = ['HEAD_OF_SALES', 'SALES_EXECUTIVE'];
 export const WON_REASONS = ['Price', 'Product fit', 'Relationship', 'Speed', 'Referral', 'Other'];
 export const LOST_REASONS = ['Price', 'Competitor', 'Timing', 'No sponsor', 'No budget', 'Other'];

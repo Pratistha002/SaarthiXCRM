@@ -20,7 +20,6 @@ services:
       - "8082:8082"
     environment:
       MONGODB_URI: mongodb://mongo:27017/saarthix_crm
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
       SPRING_MAIL_AUTH: "false"

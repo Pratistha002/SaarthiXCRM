@@ -12,7 +12,7 @@ function afterSignIn(user, next) {
 
 const POINTS = [
   ['Visual pipeline with drag-and-drop stages', 'M4 7h16M4 12h10M4 17h13'],
-  ['AI lead scoring and instant email drafting', 'M12 3l1.4 3.6L17 8l-3.6 1.4L12 13l-1.4-3.6L7 8l3.6-1.4L12 3z'],
+  ['Follow-ups and tasks that stay on the dashboard', 'M4 5h16M8 3v4M16 3v4M4 10h16'],
   ['Secure JWT auth, your data stays yours', 'M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z'],
 ];
 
@@ -52,10 +52,10 @@ export default function Login() {
         <Link to="/"><Logo light /></Link>
         <div className="my-auto max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.15] tracking-tight">
-            Close more deals with an AI co-pilot in your pipeline.
+            Close more deals with a pipeline your team can actually run.
           </h1>
           <p className="mt-6 max-w-md text-base leading-relaxed text-white/85">
-            SaarthiX CRM unifies your leads, contacts and follow-ups — then layers summaries, email drafts and sales insights on top.
+            SaarthiX CRM unifies your leads, contacts and follow-ups in one shared workspace.
           </p>
           <ul className="mt-10 space-y-4">
             {POINTS.map(([label, path]) => (
