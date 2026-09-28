@@ -1,6 +1,8 @@
 package com.saarthix.crm.web;
 
+import com.saarthix.crm.model.Attachment;
 import com.saarthix.crm.model.Lead;
+import com.saarthix.crm.service.LeadDetailService;
 import com.saarthix.crm.service.LeadService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,9 +22,41 @@ import java.util.Map;
 @RequestMapping("/api/leads")
 public class LeadController {
     private final LeadService leads;
+    private final LeadDetailService details;
 
-    public LeadController(LeadService leads) {
+    public LeadController(LeadService leads, LeadDetailService details) {
         this.leads = leads;
+        this.details = details;
+    }
+
+    @GetMapping("/{id}/related")
+    public Map<String, Object> related(@PathVariable String id) {
+        return details.related(id);
+    }
+
+    @PutMapping("/{id}/tags")
+    public Lead tags(@PathVariable String id, @RequestBody LeadDetailService.TagsRequest request) {
+        return details.tags(id, request);
+    }
+
+    @PostMapping("/{id}/convert")
+    public Map<String, Object> convert(@PathVariable String id) {
+        return details.convert(id);
+    }
+
+    @PostMapping("/{id}/attachments")
+    public Attachment upload(@PathVariable String id, @Valid @RequestBody LeadDetailService.AttachmentRequest request) {
+        return details.upload(id, request);
+    }
+
+    @GetMapping("/{id}/attachments/{attachmentId}")
+    public Map<String, Object> download(@PathVariable String id, @PathVariable String attachmentId) {
+        return details.download(id, attachmentId);
+    }
+
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    public void deleteAttachment(@PathVariable String id, @PathVariable String attachmentId) {
+        details.deleteAttachment(id, attachmentId);
     }
 
     @GetMapping
@@ -32,8 +66,9 @@ public class LeadController {
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) String source,
             @RequestParam(required = false) String owner,
+            @RequestParam(required = false) String type,
             @RequestParam(required = false) String sort) {
-        return leads.list(q, stage, priority, source, owner, sort);
+        return leads.list(q, stage, priority, source, owner, type, sort);
     }
 
     @PostMapping

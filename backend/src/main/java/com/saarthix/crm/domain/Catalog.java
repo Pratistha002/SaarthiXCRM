@@ -7,6 +7,7 @@ import java.util.Set;
 public final class Catalog {
     public static final List<String> STAGES = List.of("New", "Qualified", "Proposal", "Won", "Lost");
     public static final List<String> PRIORITIES = List.of("High", "Medium", "Low");
+    public static final List<String> LEAD_TYPES = List.of("Student", "Institute", "Industry");
     public static final List<String> SOURCES = List.of(
             "Cold Outreach", "Event", "Social", "Website", "Other", "Referral");
     public static final List<String> TASK_STATUSES = List.of("Pending", "In Progress", "Completed");

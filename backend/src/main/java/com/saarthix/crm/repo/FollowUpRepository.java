@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface FollowUpRepository extends MongoRepository<FollowUp, String> {
     List<FollowUp> findByWorkspaceId(String workspaceId);
+    List<FollowUp> findByWorkspaceIdAndLeadId(String workspaceId, String leadId);
     List<FollowUp> findByOwnerId(String ownerId);
     List<FollowUp> findByStatusNot(String status);
 }
