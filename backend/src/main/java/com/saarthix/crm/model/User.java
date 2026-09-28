@@ -22,4 +22,7 @@ public class User {
     private String role;
     private String title;
     private Instant createdAt;
+    private Instant lastLoginAt;
+    private int loginCount;
+    private boolean platformAdmin;
 }

@@ -48,8 +48,8 @@ public class DataSeeder {
                 existing.setTitle(title);
                 dirty = true;
             }
-            if (existing.getName() == null || existing.getName().isBlank() || "Alex".equals(existing.getName())) {
-                existing.setName(name);
+            if ("alex@saarthix.com".equalsIgnoreCase(email) && !existing.isPlatformAdmin()) {
+                existing.setPlatformAdmin(true);
                 dirty = true;
             }
             return dirty ? users.save(existing) : existing;
@@ -63,6 +63,7 @@ public class DataSeeder {
             created.setRole(role);
             created.setTitle(title);
             created.setCreatedAt(Instant.now());
+            created.setPlatformAdmin("alex@saarthix.com".equalsIgnoreCase(email));
             return users.save(created);
         });
     }
