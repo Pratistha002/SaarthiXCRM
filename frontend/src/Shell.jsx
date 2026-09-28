@@ -3,21 +3,20 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
 import { ago, cx } from './lib';
-import { Avatar, Field, Logo, Modal } from './ui';
+import { Field, Logo, Modal } from './ui';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/leads', label: 'Leads' },
   { to: '/pipeline', label: 'Pipeline' },
   { to: '/contacts', label: 'Contacts' },
-  { to: '/notes', label: 'Notes' },
   { to: '/follow-ups', label: 'Follow-ups' },
-  { to: '/team', label: 'Team' },
 ];
 
 function Icon({ name }) {
   const common = { viewBox: '0 0 24 24', className: 'h-[18px] w-[18px]', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 };
   if (name === 'search') return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="M20 20l-3.5-3.5" /></svg>;
+  if (name === 'menu') return <svg {...common}><path d="M5 7h14M5 12h14M5 17h14" strokeLinecap="round" /></svg>;
   if (name === 'bell') return <svg {...common}><path d="M6 9a6 6 0 1 1 12 0c0 7 2 7 2 7H4s2 0 2-7" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>;
   if (name === 'dash') return <svg {...common}><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>;
   if (name === 'leads') return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M4 19c.6-3 2.6-4.5 5-4.5S13.4 16 14 19" /><path d="M16 8h4M18 6v4" /></svg>;
@@ -32,9 +31,7 @@ const RAIL = [
   { to: '/leads', icon: 'leads' },
   { to: '/pipeline', icon: 'pipe' },
   { to: '/contacts', icon: 'people' },
-  { to: '/notes', icon: 'note' },
   { to: '/follow-ups', icon: 'task' },
-  { to: '/team', icon: 'people' },
 ];
 
 export default function Shell({ children }) {
@@ -45,7 +42,7 @@ export default function Shell({ children }) {
   const [hits, setHits] = useState(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState({ name: user?.name || '', company: user?.company || '', title: user?.title || '' });
   const [error, setError] = useState('');
@@ -114,18 +111,41 @@ export default function Shell({ children }) {
                 to={item.to}
                 className={({ isActive }) => cx(
                   'rounded-full px-3.5 py-2 text-sm font-medium transition',
-                  isActive ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
+                  isActive ? 'text-slate-900' : 'text-slate-400 hover:text-slate-700',
                 )}
               >
                 {item.label}
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 sm:inline-flex">
+              <span className="grid h-4 w-4 place-items-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
+              Welcome back, {user?.name?.split(' ')[0] || 'there'}
+            </div>
             <div className="relative">
-              <button type="button" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => setSearchOpen((open) => !open)} aria-label="Search">
-                <Icon name="search" />
+              <button type="button" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => { setMenuOpen((open) => !open); setSearchOpen(false); setNotesOpen(false); }} aria-label="Menu">
+                <Icon name="menu" />
               </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-12 w-64 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200">
+                  <p className="px-3 pt-2 text-sm font-semibold">{user?.name}</p>
+                  <p className="px-3 text-xs text-slate-500">{user?.email}</p>
+                  <div className="mt-2 space-y-1">
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>Search</button>
+                    <button type="button" className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setNotesOpen(true); }}>
+                      <span>Notifications</span>
+                      {unread > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
+                    </button>
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/notes'); }}>Notes</button>
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/team'); }}>Team</button>
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setEditing(true); }}>Edit profile</button>
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="relative">
               {searchOpen && (
                 <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
                   <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads, contacts, notes" className="field" />
@@ -156,12 +176,6 @@ export default function Shell({ children }) {
                   )}
                 </div>
               )}
-            </div>
-            <div className="relative">
-              <button type="button" className="relative grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => setNotesOpen((open) => !open)} aria-label="Notifications">
-                <Icon name="bell" />
-                {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}
-              </button>
               {notesOpen && (
                 <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
                   <div className="mb-2 flex items-center justify-between px-1">
@@ -182,23 +196,6 @@ export default function Shell({ children }) {
                         <p className="mt-1 text-[11px] text-slate-400">{ago(item.createdAt)}</p>
                       </button>
                     ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <button type="button" className="relative" onClick={() => setProfileOpen((open) => !open)} aria-label="Profile">
-                <Avatar name={user?.name} />
-                <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-rose-500" />
-              </button>
-              {profileOpen && (
-                <div className="absolute right-0 top-12 w-64 rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
-                  <p className="px-2 font-semibold">{user?.name}</p>
-                  <p className="px-2 text-xs text-slate-500">{user?.email}</p>
-                  <p className="px-2 text-xs text-slate-400">{user?.title || user?.company} · {user?.role === 'ADMIN' ? 'Admin' : user?.role === 'MANAGER' ? 'Manager' : 'Rep'}</p>
-                  <div className="mt-3 space-y-1">
-                    <button type="button" className="w-full rounded-xl px-2 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setProfileOpen(false); setEditing(true); }}>Edit profile</button>
-                    <button type="button" className="w-full rounded-xl px-2 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
                   </div>
                 </div>
               )}
