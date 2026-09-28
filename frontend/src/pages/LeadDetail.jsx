@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  PRIORITIES, PURPOSES, TONES, ago, closeReasons, cx, dueLabel, isOverdue, isoDay, money, prettyDate, prettyTime,
+  PRIORITIES, ago, closeReasons, cx, dueLabel, isOverdue, isoDay, money, prettyDate, prettyTime,
 } from '../lib';
 import { Banner, Field, Modal, Spinner } from '../ui';
 import LeadForm from './LeadForm';
@@ -34,7 +34,6 @@ export default function LeadDetail() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [closing, setClosing] = useState(null);
   const [menu, setMenu] = useState(false);
-  const [summary, setSummary] = useState(null);
   const [sidebar, setSidebar] = useState(true);
 
   async function load() {
@@ -118,17 +117,6 @@ export default function LeadDetail() {
     navigate('/leads');
   }
 
-  async function analyze() {
-    setMenu(false);
-    setSummary({ busy: true, text: '' });
-    try {
-      const result = await api('/api/ai/summary', { method: 'POST', body: { leadId: id } });
-      setSummary({ busy: false, text: result.summary });
-    } catch (err) {
-      setSummary({ busy: false, text: err.message });
-    }
-  }
-
   function jump(key) {
     setTab('overview');
     setTimeout(() => document.getElementById(`related-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
@@ -165,7 +153,6 @@ export default function LeadDetail() {
             <button type="button" className="btn-ghost !rounded-lg !px-3 !py-2" onClick={() => setMenu(!menu)} aria-label="More">•••</button>
             {menu && (
               <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200">
-                <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={analyze}>✦ AI summary</button>
                 <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenu(false); window.print(); }}>Print</button>
                 <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={remove}>Delete</button>
               </div>
@@ -229,11 +216,6 @@ export default function LeadDetail() {
 
       {emailOpen && <SendEmailModal lead={lead} onClose={() => setEmailOpen(false)} onSent={load} />}
       {closing && <CloseModal stage={closing} onClose={() => setClosing(null)} onSubmit={(reason, note) => moveStage(closing, reason, note)} />}
-      {summary && (
-        <Modal title="AI Lead Summary" subtitle={lead.name} onClose={() => setSummary(null)}>
-          <p className="text-sm leading-relaxed text-slate-700">{summary.busy ? 'Analyzing…' : summary.text}</p>
-        </Modal>
-      )}
     </div>
   );
 }
@@ -328,7 +310,7 @@ function detailRows(lead) {
     rows.push(['Name', lead.name], ['Company', lead.company]);
   }
   rows.push(
-    ['Lead Source', lead.source], ['Deal Value', money(lead.value)], ['Priority', lead.priority], ['Lead Score', lead.score],
+    ['Lead Source', lead.source], ['Deal Value', money(lead.value)], ['Priority', lead.priority],
     ['Created', `${prettyDate(lead.createdAt)} ${prettyTime(lead.createdAt)}`],
   );
   if (lead.closeReason) rows.push([`${lead.stage} Reason`, lead.closeNote ? `${lead.closeReason} — ${lead.closeNote}` : lead.closeReason]);
@@ -873,57 +855,28 @@ function InlineNote({ lead, onDone }) {
 function SendEmailModal({ lead, onClose, onSent }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [purpose, setPurpose] = useState('Follow-up');
-  const [tone, setTone] = useState('Formal');
-  const [busy, setBusy] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
 
-  async function draft() {
-    setBusy('draft');
-    setError('');
-    try {
-      const result = await api('/api/ai/email', { method: 'POST', body: { leadId: lead.id, purpose, tone } });
-      setSubject(result.subject);
-      setBody(result.body);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy('');
-    }
-  }
-
   async function send(event) {
     event.preventDefault();
-    setBusy('send');
+    setBusy(true);
     setError('');
     try {
-      await api('/api/ai/email/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
+      await api('/api/mail/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
       setSent(true);
       await onSent();
     } catch (err) {
       setError(err.message);
     } finally {
-      setBusy('');
+      setBusy(false);
     }
   }
 
   return (
     <Modal title="Send Email" subtitle={`To ${lead.name}${lead.email ? ` <${lead.email}>` : ''}`} onClose={onClose} wide>
       {!lead.email && <div className="mb-3"><Banner tone="warn">This lead has no email address. Add one with Edit first.</Banner></div>}
-      <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl bg-slate-50 p-3">
-        <Field label="Purpose">
-          <select className="field !py-2" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
-            {PURPOSES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-        <Field label="Tone">
-          <select className="field !py-2" value={tone} onChange={(event) => setTone(event.target.value)}>
-            {TONES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-        <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={draft} disabled={Boolean(busy)}>{busy === 'draft' ? 'Writing…' : '✦ Draft with AI'}</button>
-      </div>
       <form onSubmit={send} className="space-y-3">
         <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
         <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
@@ -931,7 +884,7 @@ function SendEmailModal({ lead, onClose, onSent }) {
         {sent && <Banner tone="good">Email sent to {lead.email}. In Docker you can read it at http://localhost:8025.</Banner>}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-          <button type="submit" className="btn" disabled={Boolean(busy) || !lead.email}>{busy === 'send' ? <Spinner /> : null}Send</button>
+          <button type="submit" className="btn" disabled={busy || !lead.email}>{busy ? <Spinner /> : null}Send</button>
         </div>
       </form>
     </Modal>

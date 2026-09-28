@@ -48,15 +48,6 @@ function ClockIcon() {
   );
 }
 
-function Sparkles() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-      <path d="M12 3l1.2 3.4L16.6 7.6 13.2 8.8 12 12.2 10.8 8.8 7.4 7.6l3.4-1.2L12 3z" />
-      <path d="M18.5 12l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z" />
-    </svg>
-  );
-}
-
 function peak(series) {
   if (!series?.length) return { index: 0, changePct: 0 };
   let index = 0;
@@ -208,24 +199,10 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [period, setPeriod] = useState('Monthly');
-  const [insight, setInsight] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     api('/api/dashboard').then(setData).catch((err) => setError(err.message));
   }, []);
-
-  async function analyze() {
-    setAnalyzing(true);
-    try {
-      const result = await api('/api/ai/pipeline', { method: 'POST' });
-      setInsight(result.summary);
-    } catch (err) {
-      setInsight(err.message);
-    } finally {
-      setAnalyzing(false);
-    }
-  }
 
   const view = data || EMPTY;
   const series = period === 'Annually' ? (view.annual?.length ? view.annual : view.engagement) : view.engagement;
@@ -447,18 +424,6 @@ export default function Dashboard() {
                 </li>
               ))}
             </ol>
-          </section>
-
-          <section className="card">
-            <p className="font-semibold text-slate-800">AI Sales Insights</p>
-            <p className="text-xs text-slate-400">Powered by Gemini</p>
-            <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              {insight || 'Get an instant, data-driven read on your pipeline health and what to do next.'}
-            </p>
-            <button type="button" className="btn mt-5 w-full" onClick={analyze} disabled={analyzing}>
-              <Sparkles />
-              {analyzing ? 'Analyzing…' : 'Analyze pipeline'}
-            </button>
           </section>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  LEAD_TYPES, PRIORITIES, PURPOSES, SOURCES, STAGES, TONES, ago, compact, cx, downloadCsv, money, stageDot,
+  LEAD_TYPES, PRIORITIES, SOURCES, STAGES, ago, compact, cx, downloadCsv, money, stageDot,
 } from '../lib';
 import { Avatar, Banner, Field, Modal, PriorityPill, StagePill } from '../ui';
 import LeadForm, { EMPTY_LEAD } from './LeadForm';
@@ -264,7 +264,7 @@ export default function Leads() {
                         <div className="absolute right-0 z-10 w-40 rounded-xl bg-white p-1 text-left shadow-xl ring-1 ring-slate-200">
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { open(lead); setMenu(null); }}>View</button>
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setEditor(lead); setMenu(null); }}>Edit</button>
-                          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setEmailFor(lead); setMenu(null); }}>AI email</button>
+                          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setEmailFor(lead); setMenu(null); }}>Send email</button>
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-rose-600 hover:bg-rose-50" onClick={() => { setMenu(null); remove(lead.id); }}>Delete</button>
                         </div>
                       )}
@@ -368,11 +368,9 @@ function ImportModal({ members, user, onClose, onDone }) {
 }
 
 function EmailModal({ lead, onClose }) {
-  const [purpose, setPurpose] = useState('Follow-up');
-  const [tone, setTone] = useState('Formal');
-  const [draft, setDraft] = useState(null);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);
   const [mail, setMail] = useState({ configured: false, inboxUrl: '' });
   const [error, setError] = useState('');
@@ -381,12 +379,13 @@ function EmailModal({ lead, onClose }) {
     api('/api/mail/status').then(setMail).catch(() => {});
   }, []);
 
-  async function generate() {
+  async function send(event) {
+    event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const result = await api('/api/ai/email', { method: 'POST', body: { leadId: lead.id, purpose, tone } });
-      setDraft(result);
+      await api('/api/mail/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
+      setSent(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -394,72 +393,26 @@ function EmailModal({ lead, onClose }) {
     }
   }
 
-  async function copy() {
-    const text = `Subject: ${draft.subject}\n\n${draft.body}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setError('Could not copy. Select the draft and copy it manually.');
-    }
-  }
-
   return (
-    <Modal title="AI Email Generator" subtitle={`Draft an email to ${lead.name}`} onClose={onClose} wide={Boolean(draft)}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Purpose">
-          <select className="field" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
-            {PURPOSES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-        <Field label="Tone">
-          <select className="field" value={tone} onChange={(event) => setTone(event.target.value)}>
-            {TONES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </Field>
-      </div>
-      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
-      <button type="button" className="btn mt-4 w-full" onClick={generate} disabled={busy}>{busy ? 'Writing…' : '✦ Generate email'}</button>
-      {draft && (
-        <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Subject</p>
-          <p className="font-medium">{draft.subject}</p>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{draft.body}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn-ghost" onClick={copy}>{copied ? 'Copied' : 'Copy draft'}</button>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy || sent}
-              onClick={async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await api('/api/ai/email/send', { method: 'POST', body: { leadId: lead.id, subject: draft.subject, body: draft.body } });
-                  setSent(true);
-                } catch (err) {
-                  setError(err.message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {sent ? 'Sent' : 'Send email'}
-            </button>
-          </div>
-          {sent && mail.inboxUrl && (
-            <p className="mt-3 text-xs text-slate-500">
-              Open the local inbox at <a className="font-medium text-blue-600" href={mail.inboxUrl} target="_blank" rel="noreferrer">{mail.inboxUrl}</a> to read the message.
-            </p>
-          )}
+    <Modal title="Send email" subtitle={`To ${lead.name}${lead.email ? ` <${lead.email}>` : ''}`} onClose={onClose} wide>
+      {!lead.email && <p className="mb-3 text-sm text-amber-700">This lead has no email address. Add one with Edit first.</p>}
+      <form className="space-y-3" onSubmit={send}>
+        <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
+        <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {sent && (
+          <Banner tone="good">
+            Email sent{mail.inboxUrl ? `. Open the local inbox at ${mail.inboxUrl}` : '.'}
+          </Banner>
+        )}
+        {!mail.configured && (
+          <p className="text-xs text-slate-400">Sending uses the company mailbox. In Docker that is Mailpit at http://localhost:8025.</p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn" type="submit" disabled={busy || !lead.email || sent}>{busy ? 'Sending…' : 'Send email'}</button>
         </div>
-      )}
-      {!mail.configured && (
-        <p className="mt-3 text-xs text-slate-400">Sending uses the company mailbox. In Docker that is Mailpit at http://localhost:8025.</p>
-      )}
-      <p className="mt-4 text-center text-xs text-slate-400">
-        {draft?.provider === 'gemini' ? 'Generated by Google Gemini' : 'Drafted by SaarthiX AI'}
-      </p>
+      </form>
     </Modal>
   );
 }
