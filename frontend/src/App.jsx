@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Admin from './pages/Admin';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
+import LeadDetail from './pages/LeadDetail';
 import Pipeline from './pages/Pipeline';
 import Contacts from './pages/Contacts';
 import Notes from './pages/Notes';
@@ -28,6 +29,7 @@ export default function App() {
       <Route path="/admin" element={<Admin />} />
       <Route path="/dashboard" element={<Private><Dashboard /></Private>} />
       <Route path="/leads" element={<Private><Leads /></Private>} />
+      <Route path="/leads/:id" element={<Private><LeadDetail /></Private>} />
       <Route path="/pipeline" element={<Private><Pipeline /></Private>} />
       <Route path="/contacts" element={<Private><Contacts /></Private>} />
       <Route path="/notes" element={<Private><Notes /></Private>} />

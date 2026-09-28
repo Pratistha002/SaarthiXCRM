@@ -56,7 +56,7 @@ public class AiService {
                 Tone: %s
                 Recipient: %s
                 Company: %s
-                Deal value USD: %s
+                Deal value INR: %s
                 Stage: %s
                 Priority: %s
                 Source: %s
@@ -107,7 +107,7 @@ public class AiService {
         Lead lead = owned(request.leadId());
         String prompt = """
                 Give one concrete next step for this deal, in a single sentence a salesperson can do this week.
-                Name: %s, Company: %s, Value USD: %s, Stage: %s, Priority: %s, Notes: %s
+                Name: %s, Company: %s, Value INR: %s, Stage: %s, Priority: %s, Notes: %s
                 """.formatted(safe(lead.getName()), safe(empty(lead.getCompany())), lead.getValue(), safe(lead.getStage()),
                 safe(lead.getPriority()), safe(empty(lead.getNotes())));
         String raw = gemini(prompt);

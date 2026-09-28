@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { ApiError, api } from '../api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  PRIORITIES, PURPOSES, SOURCES, STAGES, TONES, ago, closeReasons, compact, cx, downloadCsv, money, stageDot,
+  LEAD_TYPES, PRIORITIES, PURPOSES, SOURCES, STAGES, TONES, ago, compact, cx, downloadCsv, money, stageDot,
 } from '../lib';
-import { Avatar, Banner, Drawer, Field, Modal, PriorityPill, Spinner, StagePill } from '../ui';
+import { Avatar, Banner, Field, Modal, PriorityPill, StagePill } from '../ui';
+import LeadForm, { EMPTY_LEAD } from './LeadForm';
 
-const EMPTY = {
-  name: '', company: '', email: '', phone: '', value: 0, stage: 'New', priority: 'Medium', source: 'Website', notes: '', ownerId: '', closeReason: '', closeNote: '',
-};
+const SORTS = [
+  ['updated_desc', 'Recently updated'],
+  ['updated_asc', 'Least recently updated'],
+  ['created_desc', 'Newest first'],
+  ['created_asc', 'Oldest first'],
+  ['name_asc', 'Name A → Z'],
+  ['name_desc', 'Name Z → A'],
+  ['value_desc', 'Deal value high → low'],
+  ['value_asc', 'Deal value low → high'],
+];
 
 export default function Leads() {
   const { user } = useAuth();
   const { members } = useTeam();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [pack, setPack] = useState(null);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
@@ -23,16 +32,15 @@ export default function Leads() {
   const [priority, setPriority] = useState('All priority');
   const [source, setSource] = useState('All sources');
   const [owner, setOwner] = useState('All owners');
+  const [type, setType] = useState('All');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [sort, setSort] = useState('updated_desc');
   const [view, setView] = useState('list');
   const [selected, setSelected] = useState([]);
   const [editor, setEditor] = useState(null);
-  const [active, setActive] = useState(null);
   const [emailFor, setEmailFor] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(null);
-  const [duplicates, setDuplicates] = useState([]);
 
   async function load() {
     const query = new URLSearchParams();
@@ -41,6 +49,7 @@ export default function Leads() {
     if (priority !== 'All priority') query.set('priority', priority);
     if (source !== 'All sources') query.set('source', source);
     if (owner !== 'All owners') query.set('owner', owner);
+    if (type !== 'All') query.set('type', type);
     query.set('sort', sort);
     const data = await api(`/api/leads?${query.toString()}`);
     setPack(data);
@@ -52,11 +61,11 @@ export default function Leads() {
       load().catch((err) => setError(err.message));
     }, 200);
     return () => clearTimeout(timer);
-  }, [q, stage, priority, source, owner, sort]);
+  }, [q, stage, priority, source, owner, type, sort]);
 
   useEffect(() => {
     if (params.get('new') === '1') {
-      setEditor({ ...EMPTY, ownerId: user?.id || '' });
+      setEditor({ ...EMPTY_LEAD });
       params.delete('new');
       setParams(params, { replace: true });
     }
@@ -64,45 +73,30 @@ export default function Leads() {
 
   useEffect(() => {
     const id = params.get('lead');
-    if (!id || !pack) return;
-    const found = pack.leads.find((lead) => lead.id === id);
-    if (found) setActive(found);
-  }, [params, pack]);
+    if (id) navigate(`/leads/${id}`, { replace: true });
+  }, [params, navigate]);
 
   const summary = pack?.summary;
   const leads = pack?.leads || [];
   const allSelected = leads.length > 0 && selected.length === leads.length;
+  const activeFilters = [priority !== 'All priority', source !== 'All sources', owner !== 'All owners'].filter(Boolean).length;
+
+  function open(lead) {
+    navigate(`/leads/${lead.id}`, { state: { ids: leads.map((item) => item.id) } });
+  }
 
   function toggle(id) {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  async function save(event, force = false) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    setDuplicates([]);
-    try {
-      const body = { ...editor, value: Number(editor.value) || 0 };
-      const suffix = force ? '?force=true' : '';
-      if (editor.id) await api(`/api/leads/${editor.id}${suffix}`, { method: 'PUT', body });
-      else await api(`/api/leads${suffix}`, { method: 'POST', body });
-      setEditor(null);
-      await load();
-    } catch (err) {
-      setError(err.message);
-      if (err instanceof ApiError && err.data.code === 'DUPLICATE_LEAD') {
-        setDuplicates(err.data.duplicates || []);
-      }
-    } finally {
-      setBusy(false);
-    }
+  async function saved(andNew) {
+    if (!andNew) setEditor(null);
+    await load();
   }
 
   async function remove(id) {
     if (!window.confirm('Delete this lead?')) return;
     await api(`/api/leads/${id}`, { method: 'DELETE' });
-    setActive(null);
     setSelected((current) => current.filter((item) => item !== id));
     await load();
   }
@@ -126,6 +120,10 @@ export default function Leads() {
     return [['All', summary.total], ...STAGES.map((item) => [item, summary.stages?.[item] || 0])];
   }, [summary]);
 
+  if (editor) {
+    return <LeadForm lead={editor} members={members} user={user} onCancel={() => setEditor(null)} onSaved={saved} />;
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -136,7 +134,7 @@ export default function Leads() {
         <div className="flex gap-2">
           <button type="button" className="btn-ghost" onClick={() => setImporting(true)}>↑ Import</button>
           <button type="button" className="btn-ghost" onClick={exportRows}>↓ Export</button>
-          <button type="button" className="btn" onClick={() => setEditor({ ...EMPTY, ownerId: user?.id || '' })}>+ Add lead</button>
+          <button type="button" className="btn" onClick={() => setEditor({ ...EMPTY_LEAD })}>+ Create Lead</button>
         </div>
       </div>
 
@@ -162,19 +160,45 @@ export default function Leads() {
 
       <div className="card">
         <div className="flex flex-wrap items-center gap-2">
-          <input className="field max-w-md flex-1" placeholder="Search by name, company or email…" value={q} onChange={(event) => setQ(event.target.value)} />
-          <select className="field w-auto" value={priority} onChange={(event) => setPriority(event.target.value)}>
-            <option>All priority</option>
-            {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
+          <input className="field !w-auto min-w-[240px] max-w-md flex-1" placeholder="Search by name, company or email…" value={q} onChange={(event) => setQ(event.target.value)} />
+          <select className="field !w-40" value={type} onChange={(event) => setType(event.target.value)} aria-label="Lead type">
+            <option value="All">All lead types</option>
+            {LEAD_TYPES.map((item) => <option key={item}>{item}</option>)}
           </select>
-          <select className="field w-auto" value={source} onChange={(event) => setSource(event.target.value)}>
-            <option>All sources</option>
-            {SOURCES.map((item) => <option key={item}>{item}</option>)}
+          <select className="field !w-48" value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort">
+            {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <select className="field w-auto" value={owner} onChange={(event) => setOwner(event.target.value)}>
-            <option>All owners</option>
-            {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
+          <div className="relative">
+            <button type="button" className={cx('btn-ghost !rounded-xl !py-2.5', activeFilters > 0 && '!border-blue-500 !text-blue-600')} onClick={() => setFilterOpen(!filterOpen)}>
+              ⚲ Filter{activeFilters > 0 && <span className="rounded-full bg-blue-600 px-1.5 text-xs text-white">{activeFilters}</span>}
+            </button>
+            {filterOpen && (
+              <div className="absolute left-0 z-20 mt-2 w-72 space-y-3 rounded-2xl bg-white p-4 shadow-xl ring-1 ring-slate-200">
+                <Field label="Priority">
+                  <select className="field" value={priority} onChange={(event) => setPriority(event.target.value)}>
+                    <option>All priority</option>
+                    {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Lead source">
+                  <select className="field" value={source} onChange={(event) => setSource(event.target.value)}>
+                    <option>All sources</option>
+                    {SOURCES.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Lead owner">
+                  <select className="field" value={owner} onChange={(event) => setOwner(event.target.value)}>
+                    <option>All owners</option>
+                    {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+                  </select>
+                </Field>
+                <div className="flex justify-between pt-1">
+                  <button type="button" className="text-sm text-slate-500 hover:text-slate-800" onClick={() => { setPriority('All priority'); setSource('All sources'); setOwner('All owners'); }}>Clear</button>
+                  <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => setFilterOpen(false)}>Done</button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="ml-auto flex items-center gap-2 text-sm text-slate-400">
             <span>{leads.length} of {summary?.total || 0}</span>
             <button type="button" className={cx('grid h-9 w-9 place-items-center rounded-lg', view === 'list' ? 'bg-slate-100 text-slate-800' : '')} onClick={() => setView('list')}>☰</button>
@@ -220,7 +244,7 @@ export default function Leads() {
                   <tr key={lead.id} className="border-t border-slate-100">
                     <td className="py-3"><input type="checkbox" checked={selected.includes(lead.id)} onChange={() => toggle(lead.id)} /></td>
                     <td>
-                      <button type="button" className="flex items-center gap-3 text-left" onClick={() => setActive(lead)}>
+                      <button type="button" className="flex items-center gap-3 text-left" onClick={() => open(lead)}>
                         <Avatar name={lead.name} size="sm" />
                         <span>
                           <span className="block font-medium">{lead.name}</span>
@@ -230,7 +254,7 @@ export default function Leads() {
                     </td>
                     <td><span className="inline-flex items-center gap-1.5 text-xs"><span className="h-1.5 w-1.5 rounded-full" style={{ background: stageDot[lead.stage] }} />{lead.stage}</span></td>
                     <td><PriorityPill value={lead.priority} /></td>
-                    <td><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{lead.source}</span></td>
+                    <td>{lead.source ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{lead.source}</span> : <span className="text-slate-400">—</span>}</td>
                     <td className="font-medium">{money(lead.value)}</td>
                     <td className="text-slate-500">{lead.ownerName || '—'}</td>
                     <td className="text-slate-500">{ago(lead.updatedAt)}</td>
@@ -238,7 +262,7 @@ export default function Leads() {
                       <button type="button" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100" onClick={() => setMenu(menu === lead.id ? null : lead.id)}>•••</button>
                       {menu === lead.id && (
                         <div className="absolute right-0 z-10 w-40 rounded-xl bg-white p-1 text-left shadow-xl ring-1 ring-slate-200">
-                          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setActive(lead); setMenu(null); }}>View</button>
+                          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { open(lead); setMenu(null); }}>View</button>
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setEditor(lead); setMenu(null); }}>Edit</button>
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setEmailFor(lead); setMenu(null); }}>AI email</button>
                           <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-rose-600 hover:bg-rose-50" onClick={() => { setMenu(null); remove(lead.id); }}>Delete</button>
@@ -254,7 +278,7 @@ export default function Leads() {
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {leads.map((lead) => (
-              <button key={lead.id} type="button" className="rounded-2xl border border-slate-100 p-4 text-left hover:border-blue-200" onClick={() => setActive(lead)}>
+              <button key={lead.id} type="button" className="rounded-2xl border border-slate-100 p-4 text-left hover:border-blue-200" onClick={() => open(lead)}>
                 <div className="flex items-center gap-3">
                   <Avatar name={lead.name} size="sm" />
                   <div>
@@ -272,187 +296,10 @@ export default function Leads() {
         )}
       </div>
 
-      {editor && (
-        <Modal title={editor.id ? 'Edit lead' : 'New lead'} subtitle="Add a lead to your pipeline." onClose={() => setEditor(null)}>
-          <form className="grid grid-cols-2 gap-3" onSubmit={save}>
-            <div className="col-span-2"><Field label="Name"><input className="field" required value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} /></Field></div>
-            <Field label="Company"><input className="field" value={editor.company} onChange={(event) => setEditor({ ...editor, company: event.target.value })} placeholder="Company" /></Field>
-            <Field label="Email"><input className="field" type="email" value={editor.email} onChange={(event) => setEditor({ ...editor, email: event.target.value })} placeholder="email@company.com" /></Field>
-            <Field label="Phone"><input className="field" value={editor.phone} onChange={(event) => setEditor({ ...editor, phone: event.target.value })} placeholder="+1 555 0100" /></Field>
-            <Field label="Deal value (USD)"><input className="field" type="number" min="0" value={editor.value} onChange={(event) => setEditor({ ...editor, value: event.target.value })} /></Field>
-            <Field label="Stage">
-              <select className="field" value={editor.stage} onChange={(event) => setEditor({ ...editor, stage: event.target.value })}>
-                {STAGES.map((item) => <option key={item}>{item}</option>)}
-              </select>
-            </Field>
-            <Field label="Priority">
-              <select className="field" value={editor.priority} onChange={(event) => setEditor({ ...editor, priority: event.target.value })}>
-                {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
-              </select>
-            </Field>
-            <div className="col-span-2">
-              <Field label="Source">
-                <select className="field" value={editor.source} onChange={(event) => setEditor({ ...editor, source: event.target.value })}>
-                  {SOURCES.map((item) => <option key={item}>{item}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div className="col-span-2">
-              <Field label="Owner">
-                <select className="field" value={editor.ownerId || user?.id || ''} onChange={(event) => setEditor({ ...editor, ownerId: event.target.value })}>
-                  {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-                </select>
-              </Field>
-            </div>
-            {(editor.stage === 'Won' || editor.stage === 'Lost') && (
-              <>
-                <Field label={`${editor.stage} reason`}>
-                  <select className="field" required value={editor.closeReason || ''} onChange={(event) => setEditor({ ...editor, closeReason: event.target.value })}>
-                    <option value="">Choose a reason</option>
-                    {closeReasons(editor.stage).map((item) => <option key={item}>{item}</option>)}
-                  </select>
-                </Field>
-                <Field label="What happened"><input className="field" value={editor.closeNote || ''} onChange={(event) => setEditor({ ...editor, closeNote: event.target.value })} /></Field>
-              </>
-            )}
-            <div className="col-span-2">
-              <Field label="Notes"><textarea className="field min-h-24" placeholder="Context, next steps…" value={editor.notes || ''} onChange={(event) => setEditor({ ...editor, notes: event.target.value })} /></Field>
-            </div>
-            {duplicates.length > 0 && (
-              <div className="col-span-2">
-                <Banner tone="warn">
-                  <p className="font-medium">A similar lead is already in this workspace.</p>
-                  <ul className="mt-2 space-y-1">
-                    {duplicates.map((item) => (
-                      <li key={item.id}>{item.name} · {item.company} · {item.email || 'no email'} · {item.ownerName}</li>
-                    ))}
-                  </ul>
-                  <button type="button" className="mt-3 font-semibold underline" onClick={(event) => save(event, true)}>Create anyway</button>
-                </Banner>
-              </div>
-            )}
-            {error && duplicates.length === 0 && <p className="col-span-2 text-sm text-rose-600">{error}</p>}
-            <div className="col-span-2 mt-2 flex justify-end gap-2">
-              <button type="button" className="btn-ghost" onClick={() => { setEditor(null); setDuplicates([]); }}>Cancel</button>
-              <button className="btn" disabled={busy} type="submit">{busy ? <Spinner /> : null}{editor.id ? 'Save lead' : 'Create lead'}</button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {active && (
-        <LeadDrawer
-          lead={active}
-          onClose={() => { setActive(null); params.delete('lead'); setParams(params, { replace: true }); }}
-          onEdit={() => { setEditor(active); setActive(null); }}
-          onDelete={() => remove(active.id)}
-          onEmail={() => setEmailFor(active)}
-        />
-      )}
       {emailFor && <EmailModal lead={emailFor} onClose={() => setEmailFor(null)} />}
       {importing && <ImportModal members={members} user={user} onClose={() => setImporting(false)} onDone={async () => { setImporting(false); await load(); }} />}
     </div>
   );
-}
-
-function LeadDrawer({ lead, onClose, onEdit, onDelete, onEmail }) {
-  const [summary, setSummary] = useState('');
-  const [timeline, setTimeline] = useState([]);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    api(`/api/leads/${lead.id}/activity`).then((data) => setTimeline(data.activity || [])).catch(() => {});
-  }, [lead.id]);
-  async function analyze() {
-    setBusy(true);
-    try {
-      const result = await api('/api/ai/summary', { method: 'POST', body: { leadId: lead.id } });
-      setSummary(result.summary);
-    } catch (err) {
-      setSummary(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Drawer title="Lead details" onClose={onClose}>
-      <div className="space-y-5 p-5">
-        <div className="flex items-center gap-3">
-          <Avatar name={lead.name} size="lg" />
-          <div>
-            <p className="text-lg font-semibold">{lead.name}</p>
-            <p className="text-sm text-slate-500">{lead.company}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <StagePill value={lead.stage} />
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${lead.priority === 'High' ? 'bg-rose-50 text-rose-500' : lead.priority === 'Low' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{lead.priority} priority</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{lead.source}</span>
-        </div>
-        <div>
-          <p className="text-[11px] font-medium tracking-wide text-slate-400">DEAL VALUE</p>
-          <p className="text-3xl font-semibold">{money(lead.value)}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3 text-sm">
-          <p className="text-[11px] font-medium tracking-wide text-slate-400">LEAD SCORE</p>
-          <div className="mt-1 flex items-center gap-3">
-            <span className="text-xl font-semibold">{lead.score ?? '—'}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white">
-              <div className="h-full rounded-full bg-blue-600" style={{ width: `${lead.score || 0}%` }} />
-            </div>
-          </div>
-          <p className="mt-1 text-xs text-slate-400">Rule-based score from stage, priority, value and freshness.</p>
-        </div>
-        <ul className="space-y-2 text-sm text-slate-600">
-          <li>✉ {lead.email || 'No email'}</li>
-          <li>☎ {lead.phone || 'No phone'}</li>
-          <li>⌂ {lead.company || 'No company'}</li>
-          <li>◎ Owner {lead.ownerName || 'Unassigned'}</li>
-        </ul>
-        {lead.closeReason && (
-          <div className="rounded-2xl bg-slate-50 p-3 text-sm">
-            <p className="text-[11px] font-medium tracking-wide text-slate-400">{lead.stage} REASON</p>
-            <p className="mt-1 font-medium">{lead.closeReason}</p>
-            {lead.closeNote && <p className="mt-1 text-slate-600">{lead.closeNote}</p>}
-          </div>
-        )}
-        <div>
-          <p className="text-[11px] font-medium tracking-wide text-slate-400">NOTES</p>
-          <p className="mt-1 text-sm text-slate-700">{lead.notes || 'No notes yet.'}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-medium tracking-wide text-slate-400">ACTIVITY</p>
-          <ol className="mt-2 space-y-3">
-            {timeline.map((item) => (
-              <li key={item.id} className="border-l-2 border-slate-200 pl-3">
-                <p className="text-sm font-medium">{item.title}</p>
-                {item.detail && <p className="whitespace-pre-wrap text-xs text-slate-500">{item.detail}</p>}
-                <p className="mt-1 text-[11px] text-slate-400">{item.actorName} · {ago(item.createdAt)}</p>
-              </li>
-            ))}
-            {timeline.length === 0 && <p className="text-sm text-slate-400">Nothing logged yet.</p>}
-          </ol>
-        </div>
-        <div className="rounded-2xl border border-slate-100 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">✦ AI Lead Summary</p>
-            <button type="button" className="text-sm font-medium text-blue-600" onClick={analyze} disabled={busy}>{busy ? 'Analyzing…' : 'Analyze'}</button>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">{summary || 'Generate a short brief before the next conversation.'}</p>
-        </div>
-        <button type="button" className="btn-ghost w-full" onClick={onEmail}>✦ Generate AI email</button>
-        <div className="flex gap-2">
-          <button type="button" className="btn-ghost flex-1" onClick={onEdit}>Edit</button>
-          <button type="button" className="flex-1 rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white" onClick={onDelete}>Delete</button>
-        </div>
-        <p className="text-center text-xs text-slate-400">Added {pretty(lead.createdAt)}</p>
-      </div>
-    </Drawer>
-  );
-}
-
-function pretty(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function ImportModal({ members, user, onClose, onDone }) {

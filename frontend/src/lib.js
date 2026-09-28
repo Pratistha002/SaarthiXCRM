@@ -7,6 +7,30 @@ export const ROLES = ['HEAD_OF_SALES', 'SALES_EXECUTIVE'];
 export const WON_REASONS = ['Price', 'Product fit', 'Relationship', 'Speed', 'Referral', 'Other'];
 export const LOST_REASONS = ['Price', 'Competitor', 'Timing', 'No sponsor', 'No budget', 'Other'];
 export const WEIGHTS = { New: 15, Qualified: 40, Proposal: 70, Won: 100, Lost: 0 };
+export const LEAD_TYPES = ['Student', 'Institute', 'Industry'];
+export const SALUTATIONS = ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'];
+export const INDUSTRIES = [
+  'ASP (Application Service Provider)', 'Data/Telecom OEM', 'ERP (Enterprise Resource Planning)', 'Government/Military',
+  'Large Enterprise', 'ManagementISV', 'MSP (Management Service Provider)', 'Network Equipment Enterprise',
+  'Non-management ISV', 'Optical Networking', 'Service Provider', 'Small/Medium Enterprise', 'Storage Equipment',
+  'Storage Service Provider', 'Systems Integrator', 'Wireless Industry',
+];
+export const RATINGS = ['Acquired', 'Active', 'Market Failed', 'Project Cancelled', 'Shut Down'];
+export const COUNTRIES = [
+  'India', 'Australia', 'Bangladesh', 'Canada', 'China', 'France', 'Germany', 'Indonesia', 'Italy', 'Japan',
+  'Malaysia', 'Nepal', 'Netherlands', 'New Zealand', 'Pakistan', 'Philippines', 'Saudi Arabia', 'Singapore',
+  'South Africa', 'Spain', 'Sri Lanka', 'Switzerland', 'Thailand', 'United Arab Emirates', 'United Kingdom',
+  'United States', 'Vietnam',
+];
+export const STATES = {
+  India: [
+    'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
+    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh',
+    'Jammu and Kashmir', 'Jharkhand', 'Karnataka', 'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra',
+    'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim',
+    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  ],
+};
 
 export function closeReasons(stage) {
   return stage === 'Lost' ? LOST_REASONS : WON_REASONS;
@@ -47,20 +71,18 @@ export function colorFor(name = '') {
 }
 
 export function money(value) {
-  return `$${Math.round(Number(value) || 0).toLocaleString('en-US')}`;
+  return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 }
 
 export function compact(value) {
   const amount = Number(value) || 0;
   const sign = amount < 0 ? '-' : '';
   const abs = Math.abs(amount);
-  if (abs >= 1_000_000) {
-    const millions = abs / 1_000_000;
-    const text = millions >= 10 ? millions.toFixed(0) : String(Math.round(millions * 10) / 10);
-    return `${sign}$${text}M`;
-  }
-  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1000)}K`;
-  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+  const short = (n) => (n >= 10 ? n.toFixed(0) : String(Math.round(n * 10) / 10));
+  if (abs >= 10_000_000) return `${sign}₹${short(abs / 10_000_000)}Cr`;
+  if (abs >= 100_000) return `${sign}₹${short(abs / 100_000)}L`;
+  if (abs >= 10_000) return `${sign}₹${Math.round(abs / 1000)}K`;
+  return `${sign}₹${Math.round(abs).toLocaleString('en-IN')}`;
 }
 
 export function ago(iso) {

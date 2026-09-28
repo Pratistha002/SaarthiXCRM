@@ -5,12 +5,12 @@ import com.saarthix.crm.domain.DuplicateLeadException;
 import com.saarthix.crm.domain.LeadScore;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.User;
+import com.saarthix.crm.repo.AttachmentRepository;
 import com.saarthix.crm.repo.LeadRepository;
 import com.saarthix.crm.repo.NoteRepository;
 import com.saarthix.crm.repo.UserRepository;
 import com.saarthix.crm.security.Scope;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -32,11 +32,13 @@ public class LeadService {
     private final ActivityService activities;
     private final NotificationService notifications;
     private final CsvImporter importer;
+    private final AttachmentRepository attachments;
     private final Scope scope;
 
     public LeadService(LeadRepository leads, NoteRepository notes, UserRepository users,
                        ActivityService activities, NotificationService notifications,
-                       CsvImporter importer, Scope scope) {
+                       CsvImporter importer, AttachmentRepository attachments, Scope scope) {
+        this.attachments = attachments;
         this.leads = leads;
         this.notes = notes;
         this.users = users;
@@ -46,7 +48,7 @@ public class LeadService {
         this.scope = scope;
     }
 
-    public Map<String, Object> list(String q, String stage, String priority, String source, String owner, String sort) {
+    public Map<String, Object> list(String q, String stage, String priority, String source, String owner, String type, String sort) {
         List<Lead> all = workspaceLeads();
         all.forEach(this::decorate);
         String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
@@ -60,6 +62,7 @@ public class LeadService {
                 .filter(lead -> blank(priority) || "All priority".equalsIgnoreCase(priority) || priority.equalsIgnoreCase(lead.getPriority()))
                 .filter(lead -> blank(source) || "All sources".equalsIgnoreCase(source) || source.equalsIgnoreCase(lead.getSource()))
                 .filter(lead -> blank(owner) || "All owners".equalsIgnoreCase(owner) || owner.equals(lead.getOwnerId()))
+                .filter(lead -> blank(type) || type.equalsIgnoreCase(lead.getLeadType()))
                 .sorted(sorter(sort))
                 .toList();
         return Map.of("summary", summary(all), "leads", filtered);
@@ -78,7 +81,7 @@ public class LeadService {
 
     public Lead create(LeadRequest request, boolean force) {
         if (!force) {
-            List<Lead> matches = duplicates(request.email(), request.company(), request.name(), null);
+            List<Lead> matches = duplicates(request.email(), request.company(), fullName(request), null);
             if (!matches.isEmpty()) throw new DuplicateLeadException(matches);
         }
         Lead lead = new Lead();
@@ -97,14 +100,23 @@ public class LeadService {
     public Lead update(String id, LeadRequest request, boolean force) {
         Lead lead = owned(id);
         if (!force) {
-            List<Lead> matches = duplicates(request.email(), request.company(), request.name(), lead.getId());
+            List<Lead> matches = duplicates(request.email(), request.company(), fullName(request), lead.getId());
             if (!matches.isEmpty()) throw new DuplicateLeadException(matches);
         }
         String previousName = lead.getName();
         String previousStage = lead.getStage();
         String previousOwner = lead.getOwnerId();
+        Map<String, String> before = snapshot(lead);
         apply(lead, request, false);
         leads.save(lead);
+        Map<String, String> after = snapshot(lead);
+        before.forEach((label, old) -> {
+            String next = after.get(label);
+            if (!old.equals(next)) {
+                activities.log(lead, scope.user(), "field", label + " was updated",
+                        (old.isEmpty() ? "—" : old) + " → " + (next.isEmpty() ? "—" : next));
+            }
+        });
         if (!previousName.equals(lead.getName())) {
             notes.findByWorkspaceIdAndLinkedId(scope.workspaceId(), lead.getId()).forEach(note -> {
                 note.setLinkedName(lead.getName());
@@ -144,6 +156,7 @@ public class LeadService {
     public void delete(String id) {
         Lead lead = owned(id);
         activities.deleteForLead(lead.getId());
+        attachments.deleteByLeadId(lead.getId());
         leads.delete(lead);
     }
 
@@ -153,6 +166,7 @@ public class LeadService {
             for (String id : request.ids()) {
                 leads.findById(id).filter(lead -> scope.sameWorkspace(lead.getWorkspaceId())).ifPresent(lead -> {
                     activities.deleteForLead(lead.getId());
+                    attachments.deleteByLeadId(lead.getId());
                     leads.delete(lead);
                 });
                 removed++;
@@ -209,25 +223,69 @@ public class LeadService {
     }
 
     private void apply(Lead lead, LeadRequest request, boolean creating) {
-        Catalog.require(request.stage(), Catalog.STAGES, "Stage");
-        Catalog.require(request.priority(), Catalog.PRIORITIES, "Priority");
-        Catalog.require(request.source(), Catalog.SOURCES, "Source");
-        if (request.value() < 0) {
+        String stage = blank(request.stage()) ? "New" : request.stage();
+        String priority = blank(request.priority()) ? "Medium" : request.priority();
+        String source = nullToEmpty(request.source());
+        Catalog.require(stage, Catalog.STAGES, "Lead status");
+        Catalog.require(priority, Catalog.PRIORITIES, "Priority");
+        if (!source.isEmpty()) Catalog.require(source, Catalog.SOURCES, "Lead source");
+        long value = request.value() == null ? 0 : request.value();
+        if (value < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deal value cannot be negative");
         }
+        if (request.annualRevenue() != null && request.annualRevenue() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Annual revenue cannot be negative");
+        }
+        if (request.employees() != null && request.employees() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No. of employees cannot be negative");
+        }
+        String type = nullToEmpty(request.leadType());
+        Catalog.require(type, Catalog.LEAD_TYPES, "Lead type");
+        boolean student = "Student".equals(type);
+        String fullName = fullName(request);
+        if (fullName.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, student ? "Last name is required"
+                    : ("Institute".equals(type) ? "Institute name" : "Company name") + " is required");
+        }
+        String college = student ? nullToEmpty(request.collegeName()) : "";
         User owner = resolveOwner(request.ownerId());
         lead.setOwnerId(owner.getId());
         lead.setOwnerName(owner.getName());
-        lead.setName(request.name().trim());
-        lead.setCompany(request.company() == null ? "" : request.company().trim());
-        lead.setEmail(request.email() == null ? "" : request.email().trim());
-        lead.setPhone(request.phone() == null ? "" : request.phone().trim());
-        lead.setValue(request.value());
-        applyClose(lead, request.stage(), request.closeReason(), request.closeNote());
-        lead.setStage(request.stage());
-        lead.setPriority(request.priority());
-        lead.setSource(request.source());
-        lead.setNotes(request.notes() == null ? "" : request.notes().trim());
+        lead.setName(fullName);
+        lead.setLeadType(type);
+        lead.setContactPerson(student ? "" : nullToEmpty(request.contactPerson()));
+        lead.setSalutation("");
+        lead.setFirstName(student ? nullToEmpty(request.firstName()) : "");
+        lead.setLastName(student ? nullToEmpty(request.lastName()) : "");
+        lead.setTitle("");
+        lead.setCollegeName(college);
+        lead.setCourse(student ? nullToEmpty(request.course()) : "");
+        lead.setBranch(student ? nullToEmpty(request.branch()) : "");
+        lead.setCompany(student ? college : fullName);
+        lead.setEmail(nullToEmpty(request.email()));
+        lead.setPhone(student ? "" : nullToEmpty(request.phone()));
+        lead.setMobile(nullToEmpty(request.mobile()));
+        boolean industry = "Industry".equals(type);
+        lead.setFax(industry ? nullToEmpty(request.fax()) : "");
+        lead.setWebsite(student ? "" : nullToEmpty(request.website()));
+        lead.setIndustry("");
+        lead.setEmployees(industry ? request.employees() : null);
+        lead.setAnnualRevenue(industry ? request.annualRevenue() : null);
+        lead.setRating(student ? "" : nullToEmpty(request.rating()));
+        lead.setCountry(nullToEmpty(request.country()));
+        lead.setBuilding(nullToEmpty(request.building()));
+        lead.setStreet(nullToEmpty(request.street()));
+        lead.setCity(nullToEmpty(request.city()));
+        lead.setState(nullToEmpty(request.state()));
+        lead.setZip(nullToEmpty(request.zip()));
+        lead.setLatitude(nullToEmpty(request.latitude()));
+        lead.setLongitude(nullToEmpty(request.longitude()));
+        lead.setValue(value);
+        applyClose(lead, stage, request.closeReason(), request.closeNote());
+        lead.setStage(stage);
+        lead.setPriority(priority);
+        lead.setSource(source);
+        lead.setNotes(nullToEmpty(request.notes()));
         lead.setUpdatedAt(Instant.now());
         if (creating && lead.getWorkspaceId() == null) {
             lead.setWorkspaceId(scope.workspaceId());
@@ -344,10 +402,16 @@ public class LeadService {
 
     private Comparator<Lead> sorter(String sort) {
         Comparator<Lead> byUpdated = Comparator.comparing(Lead::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+        Comparator<Lead> byCreated = Comparator.comparing(Lead::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+        Comparator<Lead> byName = Comparator.comparing(lead -> nullToEmpty(lead.getName()).toLowerCase(Locale.ROOT));
         return switch (sort == null ? "" : sort) {
             case "value_asc" -> Comparator.comparingLong(Lead::getValue);
             case "value_desc" -> Comparator.comparingLong(Lead::getValue).reversed();
             case "updated_asc" -> byUpdated;
+            case "name_asc" -> byName;
+            case "name_desc" -> byName.reversed();
+            case "created_desc" -> byCreated.reversed();
+            case "created_asc" -> byCreated;
             default -> byUpdated.reversed();
         };
     }
@@ -364,15 +428,72 @@ public class LeadService {
         return value == null ? "" : value.trim();
     }
 
+    private Map<String, String> snapshot(Lead lead) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("Lead Type", nullToEmpty(lead.getLeadType()));
+        values.put("Name", nullToEmpty(lead.getName()));
+        values.put("Contact Person", nullToEmpty(lead.getContactPerson()));
+        values.put("College Name", nullToEmpty(lead.getCollegeName()));
+        values.put("Course", nullToEmpty(lead.getCourse()));
+        values.put("Branch", nullToEmpty(lead.getBranch()));
+        values.put("Email", nullToEmpty(lead.getEmail()));
+        values.put("Phone", nullToEmpty(lead.getPhone()));
+        values.put("Mobile", nullToEmpty(lead.getMobile()));
+        values.put("Fax", nullToEmpty(lead.getFax()));
+        values.put("Website", nullToEmpty(lead.getWebsite()));
+        values.put("No. of Employees", lead.getEmployees() == null ? "" : String.valueOf(lead.getEmployees()));
+        values.put("Annual Revenue", lead.getAnnualRevenue() == null ? "" : "Rs. " + lead.getAnnualRevenue());
+        values.put("Rating", nullToEmpty(lead.getRating()));
+        values.put("Lead Source", nullToEmpty(lead.getSource()));
+        values.put("Deal Value", "Rs. " + lead.getValue());
+        values.put("Priority", nullToEmpty(lead.getPriority()));
+        values.put("Address", String.join(", ", java.util.stream.Stream.of(lead.getBuilding(), lead.getStreet(),
+                lead.getCity(), lead.getState(), lead.getZip(), lead.getCountry())
+                .map(this::nullToEmpty).filter(s -> !s.isEmpty()).toList()));
+        values.put("Description", nullToEmpty(lead.getNotes()));
+        return values;
+    }
+
+    private String fullName(LeadRequest request) {
+        if (!"Student".equals(request.leadType())) return nullToEmpty(request.company());
+        String last = nullToEmpty(request.lastName());
+        if (last.isEmpty()) return "";
+        return (nullToEmpty(request.firstName()) + " " + last).trim();
+    }
+
     public record LeadRequest(
-            @NotBlank(message = "Name is required") String name,
+            String name,
+            String leadType,
+            String contactPerson,
+            String collegeName,
+            String course,
+            String branch,
+            String salutation,
+            String firstName,
+            String lastName,
+            String title,
             String company,
             String email,
             String phone,
-            @NotNull(message = "Deal value is required") Long value,
-            @NotBlank String stage,
-            @NotBlank String priority,
-            @NotBlank String source,
+            String mobile,
+            String fax,
+            String website,
+            String industry,
+            Integer employees,
+            Long annualRevenue,
+            String rating,
+            String country,
+            String building,
+            String street,
+            String city,
+            String state,
+            String zip,
+            String latitude,
+            String longitude,
+            Long value,
+            String stage,
+            String priority,
+            String source,
             String notes,
             String ownerId,
             String closeReason,
