@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
@@ -704,7 +704,12 @@ function NotesSection({ lead, notes, onChange }) {
     <Section
       id="notes"
       title="Notes"
-      action={!adding && <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setAdding(true)}>+ Add Note</button>}
+      action={(
+        <span className="flex items-center gap-3">
+          <Link className="text-sm font-medium text-blue-700" to={`/notes?lead=${lead.id}`}>View all notes</Link>
+          {!adding && <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setAdding(true)}>+ Add Note</button>}
+        </span>
+      )}
     >
       {adding && (
         <form onSubmit={add} className="mb-2 space-y-2">
@@ -970,12 +975,13 @@ const HISTORY_FILTERS = [
   ['fields', 'Field updates', ['field', 'owner']],
   ['notes', 'Notes', ['note']],
   ['tasks', 'Follow-ups', ['task']],
+  ['meetings', 'Meetings', ['meeting']],
   ['emails', 'Emails', ['email']],
   ['files', 'Attachments', ['attachment']],
   ['other', 'Other', ['created', 'converted', 'contact']],
 ];
 
-const ICONS = { contact: '👥', call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
+const ICONS = { contact: '👥', call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', meeting: '📅', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
 
 export function dayKey(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });

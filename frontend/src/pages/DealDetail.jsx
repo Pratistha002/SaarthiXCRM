@@ -13,7 +13,7 @@ import {
   CallEntry, Empty, Info, Section, callResult, dayKey, dueText, groupByDay, size, splitChange, stamp,
 } from './LeadDetail';
 
-const MEETING_TYPES = ['Meeting', 'Demo'];
+const MEETING_TYPES = ['Meeting', 'Demo', 'Visit'];
 const TASK_TYPES = NEXT_ACTIONS.filter((item) => item !== NO_FURTHER_ACTION);
 
 const RELATED = [

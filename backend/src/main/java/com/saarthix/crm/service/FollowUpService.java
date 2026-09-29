@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -80,6 +81,14 @@ public class FollowUpService {
         return Map.of("tasks", filtered, "summary", summary);
     }
 
+    public FollowUp get(String id) {
+        return owned(id);
+    }
+
+    public List<FollowUp> visible() {
+        return visibleTasks();
+    }
+
     public FollowUp create(TaskRequest request) {
         FollowUp task = new FollowUp();
         task.setWorkspaceId(scope.workspaceId());
@@ -114,16 +123,12 @@ public class FollowUpService {
 
     public FollowUp createForLead(String leadId, TaskRequest request) {
         linkedLead(leadId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
-        return create(new TaskRequest(request.title(), request.details(), request.dueDate(), request.priority(),
-                request.status(), leadId, request.assigneeId(), request.assigneeName(),
-                request.type(), request.dueTime(), request.dueAt(), request.reminder(), null));
+        return create(request.withLead(leadId));
     }
 
     public FollowUp createForDeal(String dealId, TaskRequest request) {
         linkedDeal(dealId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal not found"));
-        return create(new TaskRequest(request.title(), request.details(), request.dueDate(), request.priority(),
-                request.status(), null, request.assigneeId(), request.assigneeName(),
-                request.type(), request.dueTime(), request.dueAt(), request.reminder(), dealId));
+        return create(request.withDeal(dealId));
     }
 
     public FollowUp update(String id, TaskRequest request) {
@@ -161,7 +166,7 @@ public class FollowUpService {
             notifications.push(task.getOwnerId(), task.getWorkspaceId(), "approval",
                     "Follow-up approved",
                     "“" + task.getTitle() + "” was approved. You can edit it now.",
-                    "/follow-ups");
+                    "/calendar?event=" + task.getId());
         }
         linkedLead(task.getLeadId()).ifPresent(lead ->
                 activities.log(lead, scope.user(), "task", "Follow-up approved", task.getTitle()));
@@ -201,7 +206,17 @@ public class FollowUpService {
         }
     }
 
-    private static String dueText(FollowUp task) {
+    public static Instant endInstant(FollowUp task) {
+        if (task.getEndAt() != null) return task.getEndAt();
+        Instant start = dueInstant(task);
+        if (start == null) return null;
+        int minutes = task.getDurationMinutes() == null || task.getDurationMinutes() <= 0
+                ? (Catalog.isTimedEvent(task.getType()) ? 30 : 0)
+                : task.getDurationMinutes();
+        return minutes <= 0 ? start : start.plusSeconds(minutes * 60L);
+    }
+
+    public static String dueText(FollowUp task) {
         return task.getDueTime() == null || task.getDueTime().isBlank()
                 ? task.getDueDate() : task.getDueDate() + " " + task.getDueTime();
     }
@@ -230,6 +245,9 @@ public class FollowUpService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Reminder must be one of: " + String.join(", ", Catalog.REMINDER_MINUTES.keySet()));
         }
+        if (request.purpose() != null && !request.purpose().isBlank()) {
+            Catalog.require(request.purpose(), Catalog.VISIT_PURPOSES, "Visit purpose");
+        }
         User assignee = resolveAssignee(request.assigneeId());
         Lead lead = linkedLead(request.leadId()).orElse(null);
         applySchedule(task, request);
@@ -247,6 +265,30 @@ public class FollowUpService {
         task.setContactId(deal == null ? null : deal.getPrimaryContactId());
         task.setAssigneeId(assignee.getId());
         task.setAssigneeName(assignee.getName());
+        if (request.location() != null) task.setLocation(trim(request.location()));
+        else if (task.getLocation() == null) task.setLocation("");
+        if (request.meetingLink() != null) task.setMeetingLink(trim(request.meetingLink()));
+        else if (task.getMeetingLink() == null) task.setMeetingLink("");
+        if (request.contactPerson() != null) task.setContactPerson(trim(request.contactPerson()));
+        else if (task.getContactPerson() == null) task.setContactPerson("");
+        if (request.purpose() != null) task.setPurpose(trim(request.purpose()));
+        else if (task.getPurpose() == null) task.setPurpose("");
+        if (request.attendees() != null) task.setAttendees(trim(request.attendees()));
+        else if (task.getAttendees() == null) task.setAttendees("");
+        if (request.attendeeIds() != null) {
+            task.setAttendeeIds(sanitizeAttendees(request.attendeeIds(), assignee.getId()));
+        } else if (task.getAttendeeIds() == null) {
+            task.setAttendeeIds(sanitizeAttendees(null, assignee.getId()));
+        }
+        if (request.durationMinutes() != null) {
+            if (request.durationMinutes() < 0 || request.durationMinutes() > 12 * 60) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be between 0 and 12 hours");
+            }
+            task.setDurationMinutes(request.durationMinutes());
+        } else if (task.getDurationMinutes() == null) {
+            task.setDurationMinutes(Catalog.defaultDuration(task.getType()));
+        }
+        computeEnd(task);
         task.setRemindedOn(null);
     }
 
@@ -264,7 +306,14 @@ public class FollowUpService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid time");
             }
             task.setDueTime(request.dueTime());
-            task.setDueAt(parseInstant(request.dueAt()));
+            Instant dueAt = parseInstant(request.dueAt());
+            if (dueAt == null) {
+                dueAt = LocalDate.parse(request.dueDate())
+                        .atTime(LocalTime.parse(request.dueTime()))
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant();
+            }
+            task.setDueAt(dueAt);
         } else if (dateChanged || request.dueTime() != null) {
             task.setDueTime(null);
             task.setDueAt(null);
@@ -276,6 +325,37 @@ public class FollowUpService {
             task.setRemindAt(remindAt);
             task.setReminderSentAt(null);
         }
+    }
+
+    private static void computeEnd(FollowUp task) {
+        Instant start = dueInstant(task);
+        if (start == null || task.getDueTime() == null || task.getDueTime().isBlank()) {
+            task.setEndAt(start);
+            return;
+        }
+        int minutes = task.getDurationMinutes() == null || task.getDurationMinutes() <= 0
+                ? Catalog.defaultDuration(task.getType())
+                : task.getDurationMinutes();
+        if (minutes <= 0) minutes = 30;
+        task.setDurationMinutes(minutes);
+        task.setEndAt(start.plusSeconds(minutes * 60L));
+    }
+
+    private List<String> sanitizeAttendees(List<String> attendeeIds, String assigneeId) {
+        List<String> ids = new ArrayList<>();
+        if (assigneeId != null && !assigneeId.isBlank()) ids.add(assigneeId);
+        if (attendeeIds == null) return ids;
+        for (String id : attendeeIds) {
+            if (id == null || id.isBlank() || ids.contains(id)) continue;
+            users.findById(id)
+                    .filter(user -> scope.isPlatformAdmin() || scope.workspaceId().equals(user.getWorkspaceId()))
+                    .ifPresent(user -> ids.add(user.getId()));
+        }
+        return ids;
+    }
+
+    private static String trim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private static Instant parseInstant(String value) {
@@ -308,7 +388,7 @@ public class FollowUpService {
                 .forEach(head -> notifications.push(head.getId(), task.getWorkspaceId(), "approval",
                         "Follow-up needs approval",
                         me.getName() + " submitted “" + task.getTitle() + "”.",
-                        "/follow-ups?filter=Awaiting+Approval"));
+                        "/calendar?event=" + task.getId()));
     }
 
     private void markApproved(FollowUp task) {
@@ -331,10 +411,19 @@ public class FollowUpService {
     }
 
     private void notifyAssignee(FollowUp task, boolean created) {
-        if (task.getAssigneeId() == null || task.getAssigneeId().equals(scope.id())) return;
-        notifications.push(task.getAssigneeId(), task.getWorkspaceId(), "task",
-                created ? "Follow-up assigned to you" : "Follow-up updated",
-                task.getTitle() + " is due " + task.getDueDate(), "/follow-ups");
+        String type = task.getType() == null || task.getType().isBlank() ? "Follow-up" : task.getType();
+        String title = created ? type + " added to your calendar" : type + " updated";
+        String body = task.getTitle() + " · " + dueText(task);
+        String link = "/calendar?event=" + task.getId();
+        if (task.getAssigneeId() != null && !task.getAssigneeId().equals(scope.id())) {
+            notifications.push(task.getAssigneeId(), task.getWorkspaceId(), "task", title, body, link);
+        }
+        if (task.getAttendeeIds() == null) return;
+        for (String attendeeId : task.getAttendeeIds()) {
+            if (attendeeId == null || attendeeId.equals(scope.id()) || attendeeId.equals(task.getAssigneeId())) continue;
+            notifications.push(attendeeId, task.getWorkspaceId(), "task",
+                    "Added to " + type.toLowerCase(), body, link);
+        }
     }
 
     private List<FollowUp> visibleTasks() {
@@ -346,6 +435,7 @@ public class FollowUpService {
                 .map(Lead::getId).collect(java.util.stream.Collectors.toSet());
         return all.stream()
                 .filter(task -> me.equals(task.getOwnerId()) || me.equals(task.getAssigneeId())
+                        || (task.getAttendeeIds() != null && task.getAttendeeIds().contains(me))
                         || (task.getLeadId() != null && leadIds.contains(task.getLeadId())))
                 .toList();
     }
@@ -353,6 +443,7 @@ public class FollowUpService {
     private FollowUp owned(String id) {
         return tasks.findById(id)
                 .filter(t -> scope.canSeeTask(t.getWorkspaceId(), t.getOwnerId(), t.getAssigneeId())
+                        || (t.getAttendeeIds() != null && t.getAttendeeIds().contains(scope.id()))
                         || linkedLead(t.getLeadId()).isPresent())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Follow-up not found"));
     }
@@ -370,7 +461,25 @@ public class FollowUpService {
             String dueTime,
             String dueAt,
             String reminder,
-            String dealId) {
+            String dealId,
+            String location,
+            String meetingLink,
+            String contactPerson,
+            String purpose,
+            Integer durationMinutes,
+            List<String> attendeeIds,
+            String attendees) {
+        public TaskRequest withLead(String leadId) {
+            return new TaskRequest(title(), details(), dueDate(), priority(), status(), leadId, assigneeId(),
+                    assigneeName(), type(), dueTime(), dueAt(), reminder(), dealId(), location(), meetingLink(),
+                    contactPerson(), purpose(), durationMinutes(), attendeeIds(), attendees());
+        }
+
+        public TaskRequest withDeal(String dealId) {
+            return new TaskRequest(title(), details(), dueDate(), priority(), status(), leadId(), assigneeId(),
+                    assigneeName(), type(), dueTime(), dueAt(), reminder(), dealId, location(), meetingLink(),
+                    contactPerson(), purpose(), durationMinutes(), attendeeIds(), attendees());
+        }
     }
 
     public record StatusRequest(@NotBlank String status) {

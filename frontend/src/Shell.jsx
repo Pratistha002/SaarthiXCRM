@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
 import { ago, cx, isHeadOfSales, isPlatformAdmin } from './lib';
@@ -10,9 +10,16 @@ const NAV = [
   { to: '/leads', label: 'Leads' },
   { to: '/pipeline', label: 'Pipeline' },
   { to: '/sales', label: 'Sales & Forecast' },
+  {
+    label: 'Activities',
+    children: [
+      { to: '/notes', label: 'Notes', hint: 'Lead notes in one thread' },
+      { to: '/calendar', label: 'Calendar', hint: 'Calls, demos, visits and tasks' },
+      { to: '/meeting-logs', label: 'Meeting logs', hint: 'What was discussed and next steps' },
+    ],
+  },
   { to: '/contacts', label: 'Contacts' },
   { to: '/follow-ups', label: 'Follow-ups' },
-  { to: '/notes', label: 'Notes' },
 ];
 
 function Icon({ name }) {
@@ -26,6 +33,10 @@ function Icon({ name }) {
   if (name === 'pipe') return <svg {...common}><path d="M4 7h16M4 12h10M4 17h13" /></svg>;
   if (name === 'people') return <svg {...common}><circle cx="9" cy="9" r="3" /><circle cx="17" cy="10" r="2" /><path d="M3.5 19c.7-3 2.8-4.5 5.5-4.5s4.8 1.5 5.5 4.5M15 14.5c1.8.2 3.2 1.3 3.8 3.5" /></svg>;
   if (name === 'note') return <svg {...common}><path d="M7 4h8l4 4v12H7z" /><path d="M15 4v4h4M9 13h6M9 17h4" /></svg>;
+  if (name === 'task') return <svg {...common}><rect x="5" y="5" width="14" height="14" rx="3" /><path d="M8 12l2.5 2.5L16 9" strokeLinecap="round" /></svg>;
+  if (name === 'cal') return <svg {...common}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>;
+  if (name === 'log') return <svg {...common}><path d="M7 4h10v16H7z" /><path d="M10 8h4M10 12h4M10 16h3" /></svg>;
+  if (name === 'activity') return <svg {...common}><path d="M4 7h16M4 12h10M4 17h13" /><circle cx="18" cy="12" r="2" /></svg>;
   return <svg {...common}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>;
 }
 
@@ -34,14 +45,69 @@ const RAIL = [
   { to: '/leads', icon: 'leads', label: 'Leads' },
   { to: '/pipeline', icon: 'pipe', label: 'Pipeline' },
   { to: '/sales', icon: 'chart', label: 'Sales & Forecast' },
+  {
+    icon: 'activity',
+    label: 'Activities',
+    children: [
+      { to: '/notes', icon: 'note', label: 'Notes' },
+      { to: '/calendar', icon: 'cal', label: 'Calendar' },
+      { to: '/meeting-logs', icon: 'log', label: 'Meeting logs' },
+    ],
+  },
   { to: '/contacts', icon: 'people', label: 'Contacts' },
   { to: '/follow-ups', icon: 'task', label: 'Follow-ups' },
-  { to: '/notes', icon: 'note', label: 'Notes' },
 ];
+
+function activityActive(pathname, children) {
+  return children.some((item) => pathname === item.to || pathname.startsWith(`${item.to}/`));
+}
+
+function ActivitiesMenu({ item, compact }) {
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const active = activityActive(location.pathname, item.children);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={cx(
+          compact ? 'whitespace-nowrap rounded-full px-3 py-1.5 text-sm' : 'rounded-full px-3.5 py-2 text-sm font-medium transition',
+          compact
+            ? (active || open ? 'bg-slate-900 text-white' : 'text-slate-500')
+            : (active || open ? 'text-slate-900' : 'text-slate-400 hover:text-slate-700'),
+        )}
+      >
+        {item.label}
+        <span className="ml-1 text-[10px]">▾</span>
+      </button>
+      {open && (
+        <>
+          <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Close menu" onClick={() => setOpen(false)} />
+          <div className={cx('absolute z-50 mt-2 w-64 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200', compact ? 'left-0' : 'left-0')}>
+            {item.children.map((child) => (
+              <NavLink
+                key={child.to}
+                to={child.to}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) => cx('block rounded-xl px-3 py-2 hover:bg-slate-50', isActive && 'bg-blue-50')}
+              >
+                <p className="text-sm font-medium text-slate-800">{child.label}</p>
+                {child.hint && <p className="text-xs text-slate-400">{child.hint}</p>}
+              </NavLink>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function Shell({ children }) {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [railOpen, setRailOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
@@ -96,7 +162,42 @@ export default function Shell({ children }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col items-center border-r border-slate-200/80 bg-white py-4 lg:flex">
         <div className="mb-6 h-9 w-9" />
         <div className="flex flex-1 flex-col items-center gap-2">
-          {RAIL.map((item) => (
+          {RAIL.map((item) => item.children ? (
+            <div key={item.label} className="relative">
+              <button
+                type="button"
+                title={item.label}
+                aria-label={item.label}
+                onClick={() => setRailOpen((open) => !open)}
+                className={cx(
+                  'grid h-11 w-11 place-items-center rounded-2xl text-slate-400 transition',
+                  activityActive(location.pathname, item.children) || railOpen
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                    : 'hover:bg-slate-100 hover:text-slate-700',
+                )}
+              >
+                <Icon name={item.icon} />
+              </button>
+              {railOpen && (
+                <>
+                  <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Close activities" onClick={() => setRailOpen(false)} />
+                  <div className="absolute left-14 top-0 z-50 w-56 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        onClick={() => setRailOpen(false)}
+                        className={({ isActive }) => cx('flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-50', isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700')}
+                      >
+                        <Icon name={child.icon} />
+                        {child.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
             <NavLink
               key={item.to}
               to={item.to}
@@ -117,7 +218,9 @@ export default function Shell({ children }) {
         <header className="sticky top-0 z-20 flex h-[74px] items-center gap-4 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6">
           <Logo />
           <nav className="ml-2 hidden items-center gap-1 xl:flex">
-            {NAV.map((item) => (
+            {NAV.map((item) => item.children ? (
+              <ActivitiesMenu key={item.label} item={item} />
+            ) : (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -233,7 +336,9 @@ export default function Shell({ children }) {
           </div>
         </header>
         <div className="flex gap-2 overflow-auto border-b border-slate-200/70 bg-white px-4 py-2 xl:hidden">
-          {NAV.map((item) => (
+          {NAV.map((item) => item.children ? (
+            <ActivitiesMenu key={item.label} item={item} compact />
+          ) : (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => cx('whitespace-nowrap rounded-full px-3 py-1.5 text-sm', isActive ? 'bg-slate-900 text-white' : 'text-slate-500')}>
               {item.label}
             </NavLink>

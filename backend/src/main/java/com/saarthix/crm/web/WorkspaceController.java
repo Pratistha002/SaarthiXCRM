@@ -60,8 +60,9 @@ public class WorkspaceController {
 
     @GetMapping("/api/notes")
     public Map<String, Object> notes(@RequestParam(required = false) String q,
-                                     @RequestParam(required = false) String filter) {
-        return notes.list(q, filter);
+                                     @RequestParam(required = false) String filter,
+                                     @RequestParam(required = false) String leadId) {
+        return notes.list(q, filter, leadId);
     }
 
     @PostMapping("/api/notes")

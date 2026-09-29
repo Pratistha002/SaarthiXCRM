@@ -51,8 +51,16 @@ export function isExitStage(stage) {
 export const CALL_OUTCOMES = ['Connected', 'No Answer', 'Busy', 'Wrong Number', 'Call Back Later'];
 export const CALL_RESPONSES = ['Interested', 'Not Interested', 'Needs More Information', 'Wants Demo', 'Wants Proposal', 'Call Back Later', 'Other'];
 export const NO_FURTHER_ACTION = 'No Further Action';
-export const NEXT_ACTIONS = [NO_FURTHER_ACTION, 'Call', 'Follow-up', 'Meeting', 'Demo', 'Send Proposal', 'Email', 'WhatsApp'];
+export const NEXT_ACTIONS = [NO_FURTHER_ACTION, 'Call', 'Follow-up', 'Meeting', 'Demo', 'Visit', 'Send Proposal', 'Email', 'WhatsApp'];
 export const REMINDERS = ['None', '15 minutes before', '1 hour before', '1 day before'];
+export const CALENDAR_TYPES = ['Call', 'Follow-up', 'Meeting', 'Demo', 'Visit', 'Send Proposal', 'Email', 'WhatsApp'];
+export const TIMED_EVENT_TYPES = ['Call', 'Meeting', 'Demo', 'Visit'];
+export const MEETING_LOG_TYPES = ['Meeting', 'Demo', 'Visit'];
+export const INTEREST_LEVELS = ['Hot', 'Warm', 'Neutral', 'Cold', 'Not Interested'];
+export const VISIT_PURPOSES = [
+  'Campus visit', 'Placement meeting', 'Product demo', 'Contract discussion', 'Relationship building', 'Other',
+];
+export const EVENT_DURATION = { Call: 15, Meeting: 60, Demo: 60, Visit: 90 };
 
 export function primaryPhone(lead) {
   return (lead?.phone || lead?.mobile || '').trim();
@@ -162,7 +170,69 @@ export function dateRange(key) {
   }
 }
 
-const ACTION_ICONS = { Call: '📞', 'Follow-up': '📞', Meeting: '📅', Demo: '📅', 'Send Proposal': '📧', Email: '📧', WhatsApp: '💬' };
+const ACTION_ICONS = { Call: '📞', 'Follow-up': '☑', Meeting: '📅', Demo: '🖥️', Visit: '🏫', 'Send Proposal': '📄', Email: '📧', WhatsApp: '💬' };
+
+export const EVENT_TONE = {
+  Call: 'bg-sky-50 text-sky-800 ring-sky-100',
+  Meeting: 'bg-violet-50 text-violet-800 ring-violet-100',
+  Demo: 'bg-blue-50 text-blue-800 ring-blue-100',
+  Visit: 'bg-amber-50 text-amber-900 ring-amber-100',
+  'Follow-up': 'bg-slate-100 text-slate-700 ring-slate-200',
+  'Send Proposal': 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+  Email: 'bg-indigo-50 text-indigo-800 ring-indigo-100',
+  WhatsApp: 'bg-teal-50 text-teal-800 ring-teal-100',
+};
+
+export const EVENT_BAR = {
+  Call: 'bg-sky-500',
+  Meeting: 'bg-violet-500',
+  Demo: 'bg-blue-600',
+  Visit: 'bg-amber-500',
+  'Follow-up': 'bg-slate-500',
+  'Send Proposal': 'bg-emerald-500',
+  Email: 'bg-indigo-500',
+  WhatsApp: 'bg-teal-500',
+};
+
+export function eventIcon(type) {
+  return ACTION_ICONS[type] || '☑';
+}
+
+export function isTimedEvent(type) {
+  return TIMED_EVENT_TYPES.includes(type);
+}
+
+export function canLogMeeting(type) {
+  return MEETING_LOG_TYPES.includes(type);
+}
+
+export function formatClock(time) {
+  if (!time) return '';
+  const [hours, minutes] = time.split(':').map(Number);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  const hour = ((hours + 11) % 12) + 1;
+  return `${hour}:${String(minutes || 0).padStart(2, '0')} ${suffix}`;
+}
+
+export function monthMatrix(anchor = new Date()) {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const start = startOfWeek(first);
+  return Array.from({ length: 6 }, (_, week) => Array.from({ length: 7 }, (_, day) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + week * 7 + day);
+    return date;
+  }));
+}
+
+export function shiftDate(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+export function monthLabel(date) {
+  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
 
 export function nextActionLabel(action) {
   if (!action) return null;

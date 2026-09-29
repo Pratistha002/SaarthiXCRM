@@ -37,7 +37,7 @@ public class ReminderService {
             String body = task.getTitle()
                     + (task.getLeadName() == null || task.getLeadName().isBlank() ? "" : " · " + task.getLeadName())
                     + " · " + when;
-            String link = task.getLeadId() == null || task.getLeadId().isBlank() ? "/follow-ups" : "/leads/" + task.getLeadId();
+            String link = "/calendar?event=" + task.getId();
             notifications.push(task.getAssigneeId(), task.getWorkspaceId(), "due", "Reminder: " + task.getTitle(), body, link);
             task.setReminderSentAt(now);
             tasks.save(task);
@@ -67,7 +67,7 @@ public class ReminderService {
                     + (task.getLeadName() == null || task.getLeadName().isBlank() ? "" : " · " + task.getLeadName())
                     + (overdue ? " was due " + task.getDueDate() : "");
             notifications.push(task.getAssigneeId(), task.getWorkspaceId(),
-                    overdue ? "overdue" : "due", title, body, "/follow-ups");
+                    overdue ? "overdue" : "due", title, body, "/calendar?event=" + task.getId());
             task.setRemindedOn(stamp);
             tasks.save(task);
             sent++;
@@ -89,7 +89,7 @@ public class ReminderService {
                     notifications.push(user.getId(), task.getWorkspaceId(),
                             overdue ? "overdue" : "due",
                             overdue ? "Overdue follow-up" : "Due today",
-                            task.getTitle(), "/follow-ups");
+                            task.getTitle(), "/calendar?event=" + task.getId());
                     task.setRemindedOn(stamp);
                     tasks.save(task);
                 });
