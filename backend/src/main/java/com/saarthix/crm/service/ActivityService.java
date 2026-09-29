@@ -76,6 +76,10 @@ public class ActivityService {
         return activities.findTop25ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
     }
 
+    public List<Activity> recentAll() {
+        return activities.findTop25ByOrderByCreatedAtDesc();
+    }
+
     public void deleteForLead(String leadId) {
         activities.deleteByLeadId(leadId);
     }

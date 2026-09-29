@@ -29,7 +29,7 @@ public class ContactService {
     }
 
     public Map<String, Object> list(String q, String tag, Boolean favorite) {
-        List<Contact> all = contacts.findByWorkspaceId(scope.workspaceId());
+        List<Contact> all = visibleContacts();
         String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
         List<Contact> filtered = all.stream()
                 .filter(c -> query.isEmpty()
@@ -73,7 +73,7 @@ public class ContactService {
         apply(contact, request);
         contacts.save(contact);
         if (!previous.equals(contact.getName())) {
-            notes.findByWorkspaceIdAndLinkedId(scope.workspaceId(), id).forEach(note -> {
+            notes.findByWorkspaceIdAndLinkedId(contact.getWorkspaceId(), id).forEach(note -> {
                 note.setLinkedName(contact.getName());
                 notes.save(note);
             });
@@ -102,9 +102,15 @@ public class ContactService {
         contact.setFavorite(request.favorite() != null && request.favorite());
     }
 
+    private List<Contact> visibleContacts() {
+        if (scope.isPlatformAdmin()) return contacts.findAll();
+        if (scope.seesTeamData()) return contacts.findByWorkspaceId(scope.workspaceId());
+        return contacts.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+    }
+
     private Contact owned(String id) {
         return contacts.findById(id)
-                .filter(c -> scope.sameWorkspace(c.getWorkspaceId()))
+                .filter(c -> scope.canSee(c.getWorkspaceId(), c.getOwnerId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Contact not found"));
     }
 

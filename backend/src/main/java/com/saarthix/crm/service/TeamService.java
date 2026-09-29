@@ -44,16 +44,20 @@ public class TeamService {
 
     public Map<String, Object> overview() {
         User me = scope.user();
+        boolean allTeams = scope.isPlatformAdmin();
         Workspace workspace = workspaces.findById(me.getWorkspaceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found"));
-        List<Lead> all = leads.findByWorkspaceId(me.getWorkspaceId());
+        List<Lead> all = allTeams ? leads.findAll() : leads.findByWorkspaceId(me.getWorkspaceId());
+        List<User> people = allTeams ? users.findAll() : users.findByWorkspaceId(me.getWorkspaceId());
+        boolean hideOthers = scope.assignedOnly();
         List<Map<String, Object>> members = new ArrayList<>();
-        for (User user : users.findByWorkspaceId(me.getWorkspaceId())) {
+        for (User user : people) {
+            boolean isYou = user.getId().equals(me.getId());
             List<Lead> owned = all.stream().filter(l -> user.getId().equals(l.getOwnerId())).toList();
-            long open = owned.stream().filter(l -> Catalog.isOpen(l.getStage())).mapToLong(Lead::getValue).sum();
-            long won = owned.stream().filter(l -> Catalog.isWon(l.getStage())).mapToLong(Lead::getValue).sum();
-            long wonCount = owned.stream().filter(l -> Catalog.isWon(l.getStage())).count();
-            long lostCount = owned.stream().filter(l -> Catalog.isExit(l.getStage())).count();
+            long open = hideOthers && !isYou ? 0 : owned.stream().filter(l -> Catalog.isOpen(l.getStage())).mapToLong(Lead::getValue).sum();
+            long won = hideOthers && !isYou ? 0 : owned.stream().filter(l -> Catalog.isWon(l.getStage())).mapToLong(Lead::getValue).sum();
+            long wonCount = hideOthers && !isYou ? 0 : owned.stream().filter(l -> Catalog.isWon(l.getStage())).count();
+            long lostCount = hideOthers && !isYou ? 0 : owned.stream().filter(l -> Catalog.isExit(l.getStage())).count();
             long decided = wonCount + lostCount;
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", user.getId());
@@ -61,20 +65,20 @@ public class TeamService {
             row.put("email", user.getEmail());
             row.put("role", Catalog.normalizeRole(user.getRole()));
             row.put("title", user.getTitle() == null ? "" : user.getTitle());
-            row.put("leads", owned.size());
-            row.put("openValue", open);
-            row.put("wonValue", won);
-            row.put("winRate", decided == 0 ? 0 : Math.round(wonCount * 100.0 / decided));
-            row.put("isYou", user.getId().equals(me.getId()));
+            row.put("leads", hideOthers && !isYou ? null : owned.size());
+            row.put("openValue", hideOthers && !isYou ? null : open);
+            row.put("wonValue", hideOthers && !isYou ? null : won);
+            row.put("winRate", hideOthers && !isYou ? null : (decided == 0 ? 0 : Math.round(wonCount * 100.0 / decided)));
+            row.put("isYou", isYou);
             members.add(row);
         }
         members.sort(Comparator.comparing(row -> String.valueOf(row.get("name")), String.CASE_INSENSITIVE_ORDER));
-        long unassigned = all.stream().filter(l -> l.getOwnerId() == null || l.getOwnerId().isBlank()).count();
+        long unassigned = hideOthers ? 0 : all.stream().filter(l -> l.getOwnerId() == null || l.getOwnerId().isBlank()).count();
         return Map.of(
                 "workspace", Map.of("id", workspace.getId(), "name", workspace.getName(), "inviteCode", workspace.getInviteCode()),
                 "members", members,
                 "unassigned", unassigned,
-                "youAreAdmin", Catalog.isHeadOfSales(me.getRole()));
+                "youAreAdmin", Catalog.isHeadOfSales(me.getRole()) || me.isPlatformAdmin());
     }
 
     public Map<String, Object> addMember(MemberRequest request) {

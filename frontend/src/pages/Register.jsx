@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { isHeadOfSales } from '../lib';
 import { Logo, RolePicker } from '../ui';
 
 export default function Register() {
@@ -12,14 +13,25 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   if (user) return <Navigate to="/dashboard" replace />;
 
+  const needsTeamCode = !isHeadOfSales(form.role);
+
   function set(key, value) { setForm((current) => ({ ...current, [key]: value })); }
 
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError('');
+    const inviteCode = needsTeamCode ? form.inviteCode.trim() : '';
+    if (needsTeamCode && !inviteCode) {
+      setError('Sales executives need a team code to join a workspace.');
+      setBusy(false);
+      return;
+    }
     try {
-      const auth = await api('/api/auth/register', { method: 'POST', body: form });
+      const auth = await api('/api/auth/register', {
+        method: 'POST',
+        body: { ...form, inviteCode },
+      });
       save(auth);
       navigate('/dashboard', { state: { welcome: true } });
     } catch (err) {
@@ -35,7 +47,7 @@ export default function Register() {
         <Link to="/"><Logo light /></Link>
         <div className="my-auto max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.15] tracking-tight">A workspace your sales team can run every day.</h1>
-          <p className="mt-6 text-white/85">Create a company workspace, or enter a teammate&apos;s invite code and land in the same pipeline.</p>
+          <p className="mt-6 text-white/85">Head of Sales creates a workspace. Sales executives enter a team code to join that pipeline.</p>
         </div>
       </section>
       <section className="flex items-center justify-center bg-white px-6 py-12">
@@ -48,17 +60,39 @@ export default function Register() {
             ['email', 'Email', 'you@company.com', 'email'],
             ['company', 'Company', 'SaarthiX', 'text'],
             ['password', 'Password', 'At least 8 characters', 'password'],
-            ['inviteCode', 'Invite code (optional)', 'TEAM-SX26 to join the demo team', 'text'],
           ].map(([key, label, placeholder, type]) => (
             <label key={key} className="mt-4 block text-sm font-medium">{label}
-              <input className="pill-input mt-2 !px-4" required={key !== 'company' && key !== 'inviteCode'} type={type} minLength={key === 'password' ? 8 : undefined} placeholder={placeholder} value={form[key]} onChange={(event) => set(key, event.target.value)} />
+              <input className="pill-input mt-2 !px-4" required={key !== 'company'} type={type} minLength={key === 'password' ? 8 : undefined} placeholder={placeholder} value={form[key]} onChange={(event) => set(key, event.target.value)} />
             </label>
           ))}
           <label className="mt-4 block text-sm font-medium">Your role
             <div className="mt-2">
-              <RolePicker value={form.role} onChange={(role) => set('role', role)} />
+              <RolePicker
+                value={form.role}
+                onChange={(role) => setForm((current) => ({
+                  ...current,
+                  role,
+                  inviteCode: isHeadOfSales(role) ? '' : current.inviteCode,
+                }))}
+              />
             </div>
           </label>
+          {needsTeamCode && (
+            <label className="mt-4 block text-sm font-medium">
+              Team code
+              <input
+                className="pill-input mt-2 !px-4"
+                required
+                type="text"
+                placeholder="Ask Head of Sales for the team code"
+                value={form.inviteCode}
+                onChange={(event) => set('inviteCode', event.target.value)}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-400">
+                Required to join an existing team.
+              </span>
+            </label>
+          )}
           {error && <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
           <button className="btn mt-6 h-12 w-full" disabled={busy} type="submit">{busy ? 'Creating…' : 'Create account'}</button>
           <p className="mt-6 text-center text-sm text-slate-500">

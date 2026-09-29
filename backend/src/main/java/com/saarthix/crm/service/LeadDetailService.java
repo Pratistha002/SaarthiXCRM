@@ -54,7 +54,7 @@ public class LeadDetailService {
 
     public Map<String, Object> related(String id) {
         Lead lead = leadService.get(id);
-        String workspace = scope.workspaceId();
+        String workspace = lead.getWorkspaceId();
         List<Note> leadNotes = notes.findByWorkspaceIdAndLinkedId(workspace, id).stream()
                 .sorted(Comparator.comparing(Note::isPinned).reversed()
                         .thenComparing(Note::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -179,7 +179,7 @@ public class LeadDetailService {
 
     private Lead owned(String id) {
         return leads.findById(id)
-                .filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()))
+                .filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
     }
 

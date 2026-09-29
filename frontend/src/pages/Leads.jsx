@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  LEAD_TYPES, PRIORITIES, SOURCES, STAGES, ago, compact, cx, downloadCsv, money, stageDot,
+  LEAD_TYPES, PRIORITIES, SOURCES, STAGES, ago, canSeeTeamData, compact, cx, downloadCsv, money, stageDot,
 } from '../lib';
 import { Avatar, Banner, Field, Modal, PriorityPill, StagePill } from '../ui';
 import LeadForm, { EMPTY_LEAD } from './LeadForm';
@@ -149,6 +149,7 @@ function CustomTable({ leads, columns, selected, allSelected, onToggle, onToggle
 export default function Leads() {
   const { user } = useAuth();
   const { members } = useTeam();
+  const canAssign = canSeeTeamData(user);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [pack, setPack] = useState(null);
@@ -320,12 +321,14 @@ export default function Leads() {
                     {SOURCES.map((item) => <option key={item}>{item}</option>)}
                   </select>
                 </Field>
+                {canAssign && (
                 <Field label="Lead owner">
                   <select className="field" value={owner} onChange={(event) => setOwner(event.target.value)}>
                     <option>All owners</option>
                     {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
                   </select>
                 </Field>
+                )}
                 <div className="flex justify-between pt-1">
                   <button type="button" className="text-sm text-slate-500 hover:text-slate-800" onClick={() => { setPriority('All priority'); setSource('All sources'); setOwner('All owners'); }}>Clear</button>
                   <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => setFilterOpen(false)}>Done</button>
@@ -461,6 +464,7 @@ function ImportModal({ members, user, onClose, onDone }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const canAssign = canSeeTeamData(user);
 
   async function readFile(event) {
     const file = event.target.files?.[0];
@@ -490,11 +494,13 @@ function ImportModal({ members, user, onClose, onDone }) {
         <Field label="Or paste rows">
           <textarea className="field min-h-32 font-mono text-xs" value={csv} onChange={(event) => setCsv(event.target.value)} placeholder="Name,Company,Email,Value,Stage" />
         </Field>
+        {canAssign && (
         <Field label="Assign imported leads to">
           <select className="field" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
             {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
           </select>
         </Field>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={skipDuplicates} onChange={(event) => setSkipDuplicates(event.target.checked)} />
           Skip rows that match an existing email or the same name at the same company

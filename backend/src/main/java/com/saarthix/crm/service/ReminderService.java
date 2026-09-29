@@ -32,6 +32,7 @@ public class ReminderService {
     public void timedReminders() {
         Instant now = Instant.now();
         for (FollowUp task : tasks.findByRemindAtLessThanEqualAndReminderSentAtIsNullAndStatusNot(now, "Completed")) {
+            if ("Pending Approval".equals(task.getApprovalStatus())) continue;
             String when = task.getDueTime() == null ? task.getDueDate() : task.getDueDate() + " at " + task.getDueTime();
             String body = task.getTitle()
                     + (task.getLeadName() == null || task.getLeadName().isBlank() ? "" : " · " + task.getLeadName())
@@ -58,6 +59,7 @@ public class ReminderService {
                 continue;
             }
             if (due.isAfter(today)) continue;
+            if ("Pending Approval".equals(task.getApprovalStatus())) continue;
 
             boolean overdue = due.isBefore(today);
             String title = overdue ? "Overdue follow-up" : "Due today";
@@ -78,6 +80,7 @@ public class ReminderService {
         LocalDate today = LocalDate.now();
         String stamp = today.toString();
         tasks.findByStatusNot("Completed").stream()
+                .filter(task -> !"Pending Approval".equals(task.getApprovalStatus()))
                 .filter(task -> user.getId().equals(task.getAssigneeId()) || user.getId().equals(task.getOwnerId()))
                 .filter(task -> stamp.equals(task.getDueDate()) || FollowUpService.overdue(task, today))
                 .filter(task -> !stamp.equals(task.getRemindedOn()))

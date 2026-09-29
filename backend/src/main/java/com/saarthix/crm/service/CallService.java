@@ -209,7 +209,7 @@ public class CallService {
 
     private Lead owned(String id) {
         return leads.findById(id)
-                .filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()))
+                .filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
     }
 

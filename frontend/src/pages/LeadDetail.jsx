@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import {
-  EXIT_STAGES, FUNNEL_STAGES, PRIORITIES, ago, closeReasons, cx, dueLabel, isExitStage, isOverdue, isoDay, money, prettyDate, prettyTime,
+  EXIT_STAGES, FUNNEL_STAGES, PRIORITIES, ago, canSeeTeamData, closeReasons, cx, dueLabel, followUpStatusLabel, isAwaitingApproval, isExitStage, isOverdue, isoDay, money, prettyDate, prettyTime,
   primaryPhone,
 } from '../lib';
 import { Banner, Field, Modal, Spinner } from '../ui';
@@ -635,14 +635,29 @@ function ActivitiesSection({ lead, open, closed, calls, members, user, onChange 
     }
   }
 
+  async function approve(task) {
+    setError('');
+    try {
+      await api(`/api/followups/${task.id}/approve`, { method: 'POST' });
+      await onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function status(task, next) {
+    if (isAwaitingApproval(task)) return;
     await api(`/api/followups/${task.id}/status`, { method: 'PATCH', body: { status: next } });
     await onChange();
   }
 
-  const row = (task, done) => (
+  const canManage = canSeeTeamData(user);
+
+  const row = (task, done) => {
+    const awaiting = isAwaitingApproval(task);
+    return (
     <li key={task.id} className="flex items-start gap-3 py-3 text-sm">
-      <input type="checkbox" className="mt-1" checked={done} onChange={() => status(task, done ? 'Pending' : 'Completed')} aria-label={done ? 'Reopen' : 'Mark complete'} />
+      <input type="checkbox" className="mt-1" checked={done} disabled={awaiting} onChange={() => status(task, done ? 'Pending' : 'Completed')} aria-label={done ? 'Reopen' : 'Mark complete'} />
       <div className="flex-1">
         <p className={cx('font-medium', done && 'text-slate-400 line-through')}>
           {task.type && <span className="mr-2 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 no-underline">{task.type}</span>}
@@ -650,13 +665,18 @@ function ActivitiesSection({ lead, open, closed, calls, members, user, onChange 
         </p>
         {task.details && <p className="text-xs text-slate-500">{task.details}</p>}
         <p className={cx('mt-0.5 text-xs', !done && isOverdue(task) ? 'text-rose-600' : 'text-slate-400')}>
-          Due {dueText(task)} · {task.priority} · {task.assigneeName}
+          Due {dueText(task)} · {task.priority} · {task.assigneeName} · {followUpStatusLabel(task)}
           {task.reminder && task.reminder !== 'None' ? ` · 🔔 ${task.reminder}` : ''}
           {!done && isOverdue(task) ? ' · Overdue' : ''}
         </p>
       </div>
+      {awaiting && canManage && (
+        <button type="button" className="text-xs font-medium text-emerald-600" onClick={() => approve(task)}>Approve</button>
+      )}
+      {awaiting && !canManage && <span className="text-xs text-amber-600">Waiting for approval</span>}
     </li>
-  );
+    );
+  };
 
   return (
     <>
@@ -675,15 +695,20 @@ function ActivitiesSection({ lead, open, closed, calls, members, user, onChange 
               </select>
             </Field>
             <Field label="Assign to">
+              {canSeeTeamData(user) ? (
               <select className="field" value={form.assigneeId} onChange={(event) => setForm({ ...form, assigneeId: event.target.value })}>
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
               </select>
+              ) : (
+                <input className="field" readOnly value={user?.name || 'You'} />
+              )}
             </Field>
             <Field label="Details"><input className="field" value={form.details} onChange={(event) => setForm({ ...form, details: event.target.value })} /></Field>
+            {!canSeeTeamData(user) && <p className="text-xs text-slate-500 sm:col-span-2">Head of Sales will approve this follow-up before you can edit it.</p>}
             {error && <p className="text-sm text-rose-600 sm:col-span-2">{error}</p>}
             <div className="flex justify-end gap-2 sm:col-span-2">
               <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setForm(null)}>Cancel</button>
-              <button type="submit" className="btn !rounded-lg !py-1.5">Save</button>
+              <button type="submit" className="btn !rounded-lg !py-1.5">{canSeeTeamData(user) ? 'Save' : 'Submit for approval'}</button>
             </div>
           </form>
         )}

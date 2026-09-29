@@ -11,5 +11,6 @@ public interface ActivityRepository extends MongoRepository<Activity, String> {
     List<Activity> findByLeadIdAndTypeOrderByCreatedAtDesc(String leadId, String type);
     Optional<Activity> findFirstByLeadIdAndCallRequestId(String leadId, String requestId);
     List<Activity> findTop25ByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
+    List<Activity> findTop25ByOrderByCreatedAtDesc();
     void deleteByLeadId(String leadId);
 }

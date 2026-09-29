@@ -32,4 +32,8 @@ public class FollowUp {
     private String assigneeName;
     private String remindedOn;
     private Instant createdAt;
+    private String approvalStatus;
+    private String approvedById;
+    private String approvedByName;
+    private Instant approvedAt;
 }

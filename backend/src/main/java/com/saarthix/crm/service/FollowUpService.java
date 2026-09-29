@@ -42,13 +42,15 @@ public class FollowUpService {
     }
 
     public Map<String, Object> list(String filter) {
-        List<FollowUp> all = tasks.findByWorkspaceId(scope.workspaceId());
+        List<FollowUp> all = visibleTasks();
         LocalDate today = LocalDate.now();
         String mode = filter == null ? "All" : filter;
         List<FollowUp> filtered = all.stream()
                 .filter(task -> switch (mode) {
-                    case "Pending" -> "Pending".equals(task.getStatus());
+                    case "Pending" -> "Pending".equals(task.getStatus()) && Catalog.isApproved(task.getApprovalStatus());
                     case "In Progress" -> "In Progress".equals(task.getStatus());
+                    case "Approved" -> Catalog.APPROVED.equals(task.getStatus()) && Catalog.isApproved(task.getApprovalStatus());
+                    case "Awaiting Approval" -> Catalog.isPendingApproval(task.getApprovalStatus());
                     case "Completed" -> "Completed".equals(task.getStatus());
                     case "Overdue" -> overdue(task, today);
                     default -> true;
@@ -60,11 +62,13 @@ public class FollowUpService {
                 .toList();
         long completed = all.stream().filter(t -> "Completed".equals(t.getStatus())).count();
         long overdue = all.stream().filter(t -> overdue(t, today)).count();
-        long pending = all.stream().filter(t -> "Pending".equals(t.getStatus()) && !overdue(t, today)).count();
+        long pending = all.stream().filter(t -> "Pending".equals(t.getStatus()) && Catalog.isApproved(t.getApprovalStatus()) && !overdue(t, today)).count();
+        long awaiting = all.stream().filter(t -> Catalog.isPendingApproval(t.getApprovalStatus())).count();
         long total = all.size();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("total", total);
         summary.put("pending", pending);
+        summary.put("awaiting", awaiting);
         summary.put("overdue", overdue);
         summary.put("completed", completed);
         summary.put("donePct", total == 0 ? 0 : Math.round(completed * 100.0 / total));
@@ -78,10 +82,25 @@ public class FollowUpService {
         task.setOwnerId(scope.id());
         task.setCreatedAt(Instant.now());
         apply(task, request);
+        if (scope.assignedOnly()) {
+            task.setApprovalStatus(Catalog.PENDING_APPROVAL);
+            task.setStatus("Pending");
+            task.setApprovedById(null);
+            task.setApprovedByName(null);
+            task.setApprovedAt(null);
+        } else {
+            markApproved(task);
+        }
         tasks.save(task);
-        notifyAssignee(task, true);
+        if (Catalog.isPendingApproval(task.getApprovalStatus())) {
+            notifyHeads(task);
+        } else {
+            notifyAssignee(task, true);
+        }
         linkedLead(task.getLeadId()).ifPresent(lead -> {
-            activities.log(lead, scope.user(), "task", "Follow-up added", task.getTitle() + " due " + dueText(task));
+            activities.log(lead, scope.user(), "task",
+                    Catalog.isPendingApproval(task.getApprovalStatus()) ? "Follow-up submitted for approval" : "Follow-up added",
+                    task.getTitle() + " due " + dueText(task));
             syncNextFollowUp(lead.getId());
         });
         return task;
@@ -96,6 +115,7 @@ public class FollowUpService {
 
     public FollowUp update(String id, TaskRequest request) {
         FollowUp task = owned(id);
+        requireEditable(task);
         String previousLead = task.getLeadId();
         apply(task, request);
         tasks.save(task);
@@ -108,8 +128,30 @@ public class FollowUpService {
     public FollowUp status(String id, StatusRequest request) {
         Catalog.require(request.status(), Catalog.TASK_STATUSES, "Status");
         FollowUp task = owned(id);
+        requireEditable(task);
         task.setStatus(request.status());
         tasks.save(task);
+        syncNextFollowUp(task.getLeadId());
+        return task;
+    }
+
+    public FollowUp approve(String id) {
+        scope.requireAdmin();
+        FollowUp task = owned(id);
+        if (!Catalog.isPendingApproval(task.getApprovalStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This follow-up is already approved");
+        }
+        markApproved(task);
+        task.setStatus(Catalog.APPROVED);
+        tasks.save(task);
+        if (task.getOwnerId() != null && !task.getOwnerId().equals(scope.id())) {
+            notifications.push(task.getOwnerId(), task.getWorkspaceId(), "approval",
+                    "Follow-up approved",
+                    "“" + task.getTitle() + "” was approved. You can edit it now.",
+                    "/follow-ups");
+        }
+        linkedLead(task.getLeadId()).ifPresent(lead ->
+                activities.log(lead, scope.user(), "task", "Follow-up approved", task.getTitle()));
         syncNextFollowUp(task.getLeadId());
         return task;
     }
@@ -124,7 +166,7 @@ public class FollowUpService {
     public void syncNextFollowUp(String leadId) {
         linkedLead(leadId).ifPresent(lead -> {
             Instant next = tasks.findByWorkspaceIdAndLeadId(lead.getWorkspaceId(), lead.getId()).stream()
-                    .filter(task -> !"Completed".equals(task.getStatus()))
+                    .filter(task -> !"Completed".equals(task.getStatus()) && Catalog.isApproved(task.getApprovalStatus()))
                     .map(FollowUpService::dueInstant)
                     .filter(java.util.Objects::nonNull)
                     .min(Comparator.naturalOrder())
@@ -152,7 +194,8 @@ public class FollowUpService {
     }
 
     public static boolean overdue(FollowUp task, LocalDate today) {
-        if ("Completed".equals(task.getStatus()) || task.getDueDate() == null || task.getDueDate().isBlank()) {
+        if ("Completed".equals(task.getStatus()) || Catalog.isPendingApproval(task.getApprovalStatus())
+                || task.getDueDate() == null || task.getDueDate().isBlank()) {
             return false;
         }
         return LocalDate.parse(task.getDueDate()).isBefore(today);
@@ -227,17 +270,41 @@ public class FollowUpService {
     }
 
     private User resolveAssignee(String assigneeId) {
-        if (assigneeId == null || assigneeId.isBlank()) {
+        if (scope.assignedOnly() || assigneeId == null || assigneeId.isBlank()) {
             return scope.user();
         }
         return users.findById(assigneeId)
-                .filter(user -> scope.workspaceId().equals(user.getWorkspaceId()))
+                .filter(user -> scope.isPlatformAdmin() || scope.workspaceId().equals(user.getWorkspaceId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "That teammate is not in this workspace"));
     }
 
     private java.util.Optional<Lead> linkedLead(String leadId) {
         if (leadId == null || leadId.isBlank()) return java.util.Optional.empty();
-        return leads.findById(leadId).filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()));
+        return leads.findById(leadId).filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()));
+    }
+
+    private void notifyHeads(FollowUp task) {
+        User me = scope.user();
+        users.findByWorkspaceId(task.getWorkspaceId()).stream()
+                .filter(user -> Catalog.isHeadOfSales(user.getRole()) && !user.getId().equals(me.getId()))
+                .forEach(head -> notifications.push(head.getId(), task.getWorkspaceId(), "approval",
+                        "Follow-up needs approval",
+                        me.getName() + " submitted “" + task.getTitle() + "”.",
+                        "/follow-ups?filter=Awaiting+Approval"));
+    }
+
+    private void markApproved(FollowUp task) {
+        task.setApprovalStatus(Catalog.APPROVED);
+        task.setApprovedAt(Instant.now());
+        task.setApprovedById(scope.id());
+        task.setApprovedByName(scope.user().getName());
+    }
+
+    private void requireEditable(FollowUp task) {
+        if (scope.assignedOnly() && Catalog.isPendingApproval(task.getApprovalStatus())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This follow-up is waiting for Head of Sales approval");
+        }
     }
 
     private void notifyAssignee(FollowUp task, boolean created) {
@@ -247,9 +314,23 @@ public class FollowUpService {
                 task.getTitle() + " is due " + task.getDueDate(), "/follow-ups");
     }
 
+    private List<FollowUp> visibleTasks() {
+        if (scope.isPlatformAdmin()) return tasks.findAll();
+        List<FollowUp> all = tasks.findByWorkspaceId(scope.workspaceId());
+        if (scope.seesTeamData()) return all;
+        String me = scope.id();
+        java.util.Set<String> leadIds = leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), me).stream()
+                .map(Lead::getId).collect(java.util.stream.Collectors.toSet());
+        return all.stream()
+                .filter(task -> me.equals(task.getOwnerId()) || me.equals(task.getAssigneeId())
+                        || (task.getLeadId() != null && leadIds.contains(task.getLeadId())))
+                .toList();
+    }
+
     private FollowUp owned(String id) {
         return tasks.findById(id)
-                .filter(t -> scope.sameWorkspace(t.getWorkspaceId()))
+                .filter(t -> scope.canSeeTask(t.getWorkspaceId(), t.getOwnerId(), t.getAssigneeId())
+                        || linkedLead(t.getLeadId()).isPresent())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Follow-up not found"));
     }
 
