@@ -42,7 +42,7 @@ export default function Shell({ children }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -133,7 +133,42 @@ export default function Shell({ children }) {
               Welcome back, {user?.name?.split(' ')[0] || 'there'}
             </div>
             <div className="relative">
-              <button type="button" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => { setMenuOpen((open) => !open); setSearchOpen(false); setNotesOpen(false); }} aria-label="Menu">
+              <button
+                type="button"
+                className="relative grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+                onClick={() => { setNotificationsOpen((open) => !open); setMenuOpen(false); setSearchOpen(false); }}
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <Icon name="bell" />
+                {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
+              </button>
+              {notificationsOpen && (
+                <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
+                  <div className="mb-2 flex items-center justify-between px-1">
+                    <p className="text-sm font-semibold">Notifications</p>
+                    <button type="button" className="text-xs font-medium text-blue-600" onClick={markAll}>Mark all read</button>
+                  </div>
+                  <div className="max-h-80 space-y-1 overflow-auto">
+                    {notifications.length === 0 && <p className="px-2 py-4 text-sm text-slate-400">You are all caught up.</p>}
+                    {notifications.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={cx('w-full rounded-xl px-3 py-2 text-left', item.read ? '' : 'bg-blue-50/70')}
+                        onClick={() => { setNotificationsOpen(false); if (item.link) navigate(item.link); }}
+                      >
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className="text-xs text-slate-500">{item.body}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{ago(item.createdAt)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button type="button" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => { setMenuOpen((open) => !open); setSearchOpen(false); setNotificationsOpen(false); }} aria-label="Menu">
                 <Icon name="menu" />
               </button>
               {menuOpen && (
@@ -142,11 +177,6 @@ export default function Shell({ children }) {
                   <p className="px-3 text-xs text-slate-500">{user?.email}</p>
                   <div className="mt-2 space-y-1">
                     <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>Search</button>
-                    <button type="button" className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setNotesOpen(true); }}>
-                      <span>Notifications</span>
-                      {unread > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
-                    </button>
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/notes'); }}>Notes</button>
                     {isPlatformAdmin(user) && (
                       <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/admin'); }}>Admin console</button>
                     )}
@@ -166,8 +196,6 @@ export default function Shell({ children }) {
                   </div>
                 </div>
               )}
-            </div>
-            <div className="relative">
               {searchOpen && (
                 <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
                   <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads, contacts, notes" className="field" />
@@ -196,29 +224,6 @@ export default function Shell({ children }) {
                       )}
                     </div>
                   )}
-                </div>
-              )}
-              {notesOpen && (
-                <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <p className="text-sm font-semibold">Notifications</p>
-                    <button type="button" className="text-xs font-medium text-blue-600" onClick={markAll}>Mark all read</button>
-                  </div>
-                  <div className="max-h-80 space-y-1 overflow-auto">
-                    {notifications.length === 0 && <p className="px-2 py-4 text-sm text-slate-400">You are all caught up.</p>}
-                    {notifications.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={cx('w-full rounded-xl px-3 py-2 text-left', item.read ? '' : 'bg-blue-50/70')}
-                        onClick={() => { setNotesOpen(false); if (item.link) navigate(item.link); }}
-                      >
-                        <p className="text-sm font-medium">{item.title}</p>
-                        <p className="text-xs text-slate-500">{item.body}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">{ago(item.createdAt)}</p>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
             </div>
