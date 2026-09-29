@@ -42,10 +42,9 @@ public class DashboardService {
     }
 
     public Map<String, Object> snapshot() {
-        String workspaceId = scope.workspaceId();
-        List<Lead> all = new ArrayList<>(leads.findByWorkspaceId(workspaceId));
-        List<Contact> people = contacts.findByWorkspaceId(workspaceId);
-        List<FollowUp> followUps = tasks.findByWorkspaceId(workspaceId);
+        List<Lead> all = new ArrayList<>(visibleLeads());
+        List<Contact> people = visibleContacts();
+        List<FollowUp> followUps = visibleTasks();
         LocalDate today = LocalDate.now();
 
         long pipelineValue = all.stream().mapToLong(Lead::getValue).sum();
@@ -125,7 +124,7 @@ public class DashboardService {
         body.put("highlight", highlight(engagement));
         body.put("revenueSeries", revenueSeries(all));
         body.put("activity", recentLeads);
-        body.put("timeline", activities.recent(workspaceId));
+        body.put("timeline", timeline(all));
         body.put("sources", sources);
         body.put("upcoming", upcoming);
         body.put("stages", stages);
@@ -141,6 +140,40 @@ public class DashboardService {
                 .limit(5).toList());
         body.put("openDeals", all.stream().filter(l -> Catalog.isOpen(l.getStage())).count());
         return body;
+    }
+
+    private List<Lead> visibleLeads() {
+        if (scope.isPlatformAdmin()) return leads.findAll();
+        if (scope.seesTeamData()) return leads.findByWorkspaceId(scope.workspaceId());
+        return leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+    }
+
+    private List<Contact> visibleContacts() {
+        if (scope.isPlatformAdmin()) return contacts.findAll();
+        if (scope.seesTeamData()) return contacts.findByWorkspaceId(scope.workspaceId());
+        return contacts.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+    }
+
+    private List<FollowUp> visibleTasks() {
+        if (scope.isPlatformAdmin()) return tasks.findAll();
+        List<FollowUp> all = tasks.findByWorkspaceId(scope.workspaceId());
+        if (scope.seesTeamData()) return all;
+        String me = scope.id();
+        java.util.Set<String> leadIds = leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), me).stream()
+                .map(Lead::getId).collect(java.util.stream.Collectors.toSet());
+        return all.stream()
+                .filter(task -> me.equals(task.getOwnerId()) || me.equals(task.getAssigneeId())
+                        || (task.getLeadId() != null && leadIds.contains(task.getLeadId())))
+                .toList();
+    }
+
+    private List<com.saarthix.crm.model.Activity> timeline(List<Lead> visible) {
+        if (scope.isPlatformAdmin()) return activities.recentAll();
+        if (scope.seesTeamData()) return activities.recent(scope.workspaceId());
+        java.util.Set<String> leadIds = visible.stream().map(Lead::getId).collect(java.util.stream.Collectors.toSet());
+        return activities.recent(scope.workspaceId()).stream()
+                .filter(item -> leadIds.contains(item.getLeadId()))
+                .toList();
     }
 
     private List<Map<String, Object>> engagement(List<Lead> all) {

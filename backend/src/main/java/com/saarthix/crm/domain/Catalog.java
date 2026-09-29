@@ -14,7 +14,9 @@ public final class Catalog {
     public static final List<String> LEAD_TYPES = List.of("Student", "Institute", "Industry");
     public static final List<String> SOURCES = List.of(
             "Cold Outreach", "Event", "Social", "Website", "Other", "Referral");
-    public static final List<String> TASK_STATUSES = List.of("Pending", "In Progress", "Completed");
+    public static final List<String> TASK_STATUSES = List.of("Pending", "In Progress", "Approved", "Completed");
+    public static final String PENDING_APPROVAL = "Pending Approval";
+    public static final String APPROVED = "Approved";
     public static final List<String> PURPOSES = List.of(
             "Follow-up", "Introduction", "Proposal", "Check-in", "Closing");
     public static final List<String> TONES = List.of("Formal", "Friendly", "Concise", "Persuasive");
@@ -140,6 +142,14 @@ public final class Catalog {
 
     public static boolean isExit(String stage) {
         return EXITS.contains(stage);
+    }
+
+    public static boolean isPendingApproval(String approvalStatus) {
+        return PENDING_APPROVAL.equals(approvalStatus);
+    }
+
+    public static boolean isApproved(String approvalStatus) {
+        return approvalStatus == null || approvalStatus.isBlank() || APPROVED.equals(approvalStatus);
     }
 
     public static List<String> reasonsFor(String stage) {

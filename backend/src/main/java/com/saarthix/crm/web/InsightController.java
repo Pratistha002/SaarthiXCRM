@@ -85,7 +85,7 @@ public class InsightController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who to email");
         }
         Lead lead = leads.findById(request.leadId())
-                .filter(item -> scope.sameWorkspace(item.getWorkspaceId()))
+                .filter(item -> scope.canSee(item.getWorkspaceId(), item.getOwnerId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
         mail.send(lead.getEmail(), request.subject(), request.body(), scope.user().getEmail());
         activities.log(lead, scope.user(), "email", "Email sent: " + request.subject(), request.body());
@@ -123,20 +123,34 @@ public class InsightController {
     @GetMapping("/api/search")
     public Map<String, Object> search(@RequestParam(defaultValue = "") String q) {
         String query = q.trim().toLowerCase(Locale.ROOT);
-        String workspaceId = scope.workspaceId();
         if (query.isBlank()) {
             return Map.of("leads", List.of(), "contacts", List.of(), "notes", List.of());
         }
-        List<Lead> leadHits = leads.findByWorkspaceId(workspaceId).stream()
+        List<Lead> leadPool = scope.isPlatformAdmin() ? leads.findAll()
+                : scope.seesTeamData() ? leads.findByWorkspaceId(scope.workspaceId())
+                : leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+        List<Contact> contactPool = scope.isPlatformAdmin() ? contacts.findAll()
+                : scope.seesTeamData() ? contacts.findByWorkspaceId(scope.workspaceId())
+                : contacts.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+        List<Note> notePool = scope.isPlatformAdmin() ? notes.findAll() : notes.findByWorkspaceId(scope.workspaceId());
+        if (scope.assignedOnly()) {
+            java.util.Set<String> leadIds = leadPool.stream().map(Lead::getId).collect(java.util.stream.Collectors.toSet());
+            String me = scope.id();
+            notePool = notePool.stream()
+                    .filter(n -> me.equals(n.getOwnerId())
+                            || (n.getLinkedId() != null && leadIds.contains(n.getLinkedId())))
+                    .toList();
+        }
+        List<Lead> leadHits = leadPool.stream()
                 .filter(l -> contains(l.getName(), query) || contains(l.getCompany(), query) || contains(l.getEmail(), query))
                 .sorted(Comparator.comparing(Lead::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(6)
                 .toList();
-        List<Contact> contactHits = contacts.findByWorkspaceId(workspaceId).stream()
+        List<Contact> contactHits = contactPool.stream()
                 .filter(c -> contains(c.getName(), query) || contains(c.getCompany(), query) || contains(c.getEmail(), query))
                 .limit(6)
                 .toList();
-        List<Note> noteHits = notes.findByWorkspaceId(workspaceId).stream()
+        List<Note> noteHits = notePool.stream()
                 .filter(n -> contains(n.getBody(), query) || contains(n.getLinkedName(), query))
                 .limit(4)
                 .toList();

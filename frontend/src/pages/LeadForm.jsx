@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ApiError, api } from '../api';
 import {
-  COUNTRIES, EXIT_STAGES, FUNNEL_STAGES, LEAD_TYPES, PRIORITIES, RATINGS, SOURCES, STATES, closeReasons, cx, isExitStage,
+  COUNTRIES, EXIT_STAGES, FUNNEL_STAGES, LEAD_TYPES, PRIORITIES, RATINGS, SOURCES, STATES, canSeeTeamData, closeReasons, cx, isExitStage,
 } from '../lib';
 import { Banner, Spinner } from '../ui';
 
@@ -47,10 +47,12 @@ export default function LeadForm({ lead, members, user, onCancel, onSaved }) {
   const [duplicates, setDuplicates] = useState([]);
   const editing = Boolean(form.id);
   const type = form.leadType;
+  const canAssign = canSeeTeamData(user);
   const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
   const states = STATES[form.country];
   const visible = FIELD_ORDER.filter((key) => {
-    if (key === 'ownerId' || key === 'leadType') return true;
+    if (key === 'ownerId') return canAssign;
+    if (key === 'leadType') return true;
     return Boolean(type) && !HIDDEN[type].includes(key);
   });
 

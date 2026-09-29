@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { PRIORITIES, cx, dueLabel, isOverdue, isoDay, weekDays } from '../lib';
+import { PRIORITIES, canSeeTeamData, cx, dueLabel, followUpStatusLabel, isAwaitingApproval, isOverdue, isoDay, weekDays } from '../lib';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
 import { Avatar, Field, Modal, PriorityPill } from '../ui';
 
-const TABS = ['All', 'Pending', 'In Progress', 'Completed', 'Overdue'];
+const TABS = ['All', 'Awaiting Approval', 'Pending', 'In Progress', 'Approved', 'Completed', 'Overdue'];
 const EMPTY = { title: '', details: '', dueDate: '', priority: 'Medium', status: 'Pending', leadId: '', assigneeId: '' };
+const WORK_STATUSES = ['Pending', 'In Progress', 'Approved', 'Completed'];
 
 export default function FollowUps() {
   const { user } = useAuth();
   const { members } = useTeam();
+  const canAssign = canSeeTeamData(user);
   const [params, setParams] = useSearchParams();
   const [pack, setPack] = useState(null);
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState(() => params.get('filter') || 'All');
   const [editor, setEditor] = useState(null);
   const [leads, setLeads] = useState([]);
   const [error, setError] = useState('');
@@ -38,6 +40,7 @@ export default function FollowUps() {
 
   async function save(event) {
     event.preventDefault();
+    setError('');
     const body = { ...editor, assigneeId: editor.assigneeId || user?.id };
     try {
       if (editor.id) await api(`/api/followups/${editor.id}`, { method: 'PUT', body });
@@ -49,7 +52,18 @@ export default function FollowUps() {
     }
   }
 
+  async function approve(task) {
+    setError('');
+    try {
+      await api(`/api/followups/${task.id}/approve`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function complete(task) {
+    if (isAwaitingApproval(task)) return;
     const status = task.status === 'Completed' ? 'Pending' : 'Completed';
     await api(`/api/followups/${task.id}/status`, { method: 'PATCH', body: { status } });
     await load();
@@ -71,7 +85,7 @@ export default function FollowUps() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Follow-ups</h1>
-          <p className="text-sm text-slate-500">Stay on top of every commitment.</p>
+          <p className="text-sm text-slate-500">{canAssign ? 'Approve teammate follow-ups, then keep every commitment on track.' : 'New follow-ups go to Head of Sales for approval before you can edit them.'}</p>
         </div>
         <div className="flex gap-2">
           <div className="flex rounded-full bg-slate-100 p-1 text-xs font-medium">
@@ -84,9 +98,10 @@ export default function FollowUps() {
       </div>
       {summary && (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
               ['Total tasks', summary.total, 'All', 'bg-white'],
+              ['Awaiting approval', summary.awaiting || 0, 'Awaiting Approval', 'bg-white'],
               ['Pending', summary.pending, 'Pending', 'bg-white'],
               ['Overdue', summary.overdue, 'Overdue', 'bg-white'],
               ['Completed', summary.completed, 'Completed', 'bg-gradient-to-br from-sky-500 to-blue-700 text-white'],
@@ -123,19 +138,19 @@ export default function FollowUps() {
             onNext={() => setWeekStart((current) => { const next = new Date(current); next.setDate(current.getDate() + 7); return next; })}
             onToday={() => setWeekStart(weekDays()[0])}
             onSelect={(day) => setEditor({ ...EMPTY, dueDate: isoDay(day), assigneeId: user?.id || '' })}
-            onEdit={setEditor}
+            onEdit={(task) => { if (canAssign || !isAwaitingApproval(task)) setEditor(task); }}
           />
         ) : (
           <>
-            {filter === 'All' && overdue.length > 0 && <Section title={`Overdue ${overdue.length}`} danger tasks={overdue} onToggle={complete} onEdit={setEditor} onDelete={remove} />}
-            <Section title={filter === 'All' ? 'Up next' : filter} tasks={filter === 'All' ? rest : tasks} onToggle={complete} onEdit={setEditor} onDelete={remove} />
+            {filter === 'All' && overdue.length > 0 && <Section title={`Overdue ${overdue.length}`} danger tasks={overdue} canAssign={canAssign} onToggle={complete} onEdit={setEditor} onDelete={remove} onApprove={approve} />}
+            <Section title={filter === 'All' ? 'Up next' : filter} tasks={filter === 'All' ? rest : tasks} canAssign={canAssign} onToggle={complete} onEdit={setEditor} onDelete={remove} onApprove={approve} />
             {tasks.length === 0 && <p className="py-10 text-center text-sm text-slate-400">No follow-ups in this view.</p>}
           </>
         )}
       </div>
 
       {editor && (
-        <Modal title={editor.id ? 'Edit task' : 'New task'} subtitle="Give it a date so it shows up before it slips." onClose={() => setEditor(null)}>
+        <Modal title={editor.id ? 'Edit task' : 'New task'} subtitle={canAssign || editor.id ? 'Give it a date so it shows up before it slips.' : 'Head of Sales will approve this before you can edit it.'} onClose={() => setEditor(null)}>
           <form className="space-y-3" onSubmit={save}>
             <Field label="Title"><input className="field" required value={editor.title} onChange={(event) => setEditor({ ...editor, title: event.target.value })} /></Field>
             <Field label="Details"><textarea className="field min-h-20" value={editor.details || ''} onChange={(event) => setEditor({ ...editor, details: event.target.value })} /></Field>
@@ -146,26 +161,33 @@ export default function FollowUps() {
                   {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </Field>
+              {(canAssign || editor.id) && (
               <Field label="Status">
                 <select className="field" value={editor.status} onChange={(event) => setEditor({ ...editor, status: event.target.value })}>
-                  {['Pending', 'In Progress', 'Completed'].map((item) => <option key={item}>{item}</option>)}
+                  {WORK_STATUSES.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </Field>
+              )}
               <Field label="Related lead">
                 <select className="field" value={editor.leadId || ''} onChange={(event) => setEditor({ ...editor, leadId: event.target.value })}>
                   <option value="">None</option>
                   {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}</option>)}
                 </select>
               </Field>
+              {canAssign && (
               <Field label="Assignee">
                 <select className="field" value={editor.assigneeId || user?.id || ''} onChange={(event) => setEditor({ ...editor, assigneeId: event.target.value })}>
                   {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
                 </select>
               </Field>
+              )}
             </div>
+            {!canAssign && !editor.id && (
+              <p className="text-sm text-slate-500">This follow-up will be sent to Head of Sales for approval. You can edit it after it is approved.</p>
+            )}
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-ghost" onClick={() => setEditor(null)}>Cancel</button>
-              <button className="btn" type="submit">Save task</button>
+              <button className="btn" type="submit">{editor.id ? 'Save task' : canAssign ? 'Save task' : 'Submit for approval'}</button>
             </div>
           </form>
         </Modal>
@@ -210,15 +232,18 @@ function WeekBoard({ tasks, start, onPrev, onNext, onToday, onSelect, onEdit }) 
   );
 }
 
-function Section({ title, tasks, onToggle, onEdit, onDelete, danger }) {
+function Section({ title, tasks, canAssign, onToggle, onEdit, onDelete, onApprove, danger }) {
   if (!tasks.length) return null;
   return (
     <div className="mb-4">
       <p className={cx('mb-2 text-xs font-semibold uppercase tracking-wide', danger ? 'text-rose-500' : 'text-slate-400')}>{title}</p>
       <div className="divide-y divide-slate-100">
-        {tasks.map((task) => (
+        {tasks.map((task) => {
+          const awaiting = isAwaitingApproval(task);
+          const canEdit = canAssign || !awaiting;
+          return (
           <div key={task.id} className="flex items-start gap-3 py-3">
-            <button type="button" onClick={() => onToggle(task)} className={cx('mt-1 h-5 w-5 rounded-full border', task.status === 'Completed' ? 'border-blue-600 bg-blue-600' : 'border-slate-300')} aria-label="Toggle complete" />
+            <button type="button" onClick={() => onToggle(task)} disabled={awaiting} className={cx('mt-1 h-5 w-5 rounded-full border', task.status === 'Completed' ? 'border-blue-600 bg-blue-600' : 'border-slate-300', awaiting && 'opacity-40')} aria-label="Toggle complete" />
             <div className="min-w-0 flex-1">
               <p className={cx('font-medium', task.status === 'Completed' && 'text-slate-400 line-through')}>{task.title}</p>
               {task.details && <p className="text-sm text-slate-500">{task.details}</p>}
@@ -226,7 +251,7 @@ function Section({ title, tasks, onToggle, onEdit, onDelete, danger }) {
                 {isOverdue(task) && <span className="text-rose-500">△ Overdue · {dueLabel(task.dueDate)}</span>}
                 {!isOverdue(task) && <span className="text-slate-400">{dueLabel(task.dueDate)}</span>}
                 <PriorityPill value={task.priority} />
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600">{task.status}</span>
+                <span className={cx('rounded-full px-2 py-0.5', awaiting ? 'bg-amber-50 text-amber-700' : followUpStatusLabel(task) === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-600')}>{followUpStatusLabel(task)}</span>
                 {task.assigneeName && (
                   <span className="inline-flex items-center gap-1 text-slate-500">
                     <Avatar name={task.assigneeName} size="sm" />
@@ -235,10 +260,14 @@ function Section({ title, tasks, onToggle, onEdit, onDelete, danger }) {
                 )}
               </div>
             </div>
-            <button type="button" className="text-xs text-slate-400" onClick={() => onEdit(task)}>Edit</button>
+            {awaiting && canAssign && (
+              <button type="button" className="text-xs font-medium text-emerald-600" onClick={() => onApprove(task)}>Approve</button>
+            )}
+            {canEdit ? <button type="button" className="text-xs text-slate-400" onClick={() => onEdit(task)}>Edit</button> : <span className="text-xs text-amber-600">Waiting for approval</span>}
             <button type="button" className="text-xs text-rose-400" onClick={() => onDelete(task)}>Delete</button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

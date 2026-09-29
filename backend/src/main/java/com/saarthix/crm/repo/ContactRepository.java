@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface ContactRepository extends MongoRepository<Contact, String> {
     List<Contact> findByWorkspaceId(String workspaceId);
+    List<Contact> findByWorkspaceIdAndOwnerId(String workspaceId, String ownerId);
     List<Contact> findByOwnerId(String ownerId);
     List<Contact> findByWorkspaceIdAndAccountId(String workspaceId, String accountId);
 }

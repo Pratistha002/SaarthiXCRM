@@ -33,7 +33,7 @@ public class NoteService {
     }
 
     public Map<String, Object> list(String q, String filter) {
-        List<Note> all = notes.findByWorkspaceId(scope.workspaceId());
+        List<Note> all = visibleNotes();
         String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
         String mode = filter == null ? "All" : filter;
         List<Note> filtered = all.stream()
@@ -67,10 +67,14 @@ public class NoteService {
         note.setAuthorName(scope.user().getName());
         note.setCreatedAt(Instant.now());
         apply(note, request);
+        if ("lead".equals(note.getLinkedType()) && note.getLinkedId() != null && !note.getLinkedId().isBlank()) {
+            leads.findById(note.getLinkedId())
+                    .filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        }
         notes.save(note);
         if ("lead".equals(note.getLinkedType()) && note.getLinkedId() != null && !note.getLinkedId().isBlank()) {
             leads.findById(note.getLinkedId())
-                    .filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()))
                     .ifPresent(lead -> activities.log(lead, scope.user(), "note", "Note added", note.getBody()));
         }
         if ("deal".equals(note.getLinkedType()) && note.getLinkedId() != null && !note.getLinkedId().isBlank()) {
@@ -105,10 +109,32 @@ public class NoteService {
         note.setLinkedName(request.linkedName() == null ? "" : request.linkedName());
     }
 
+    private List<Note> visibleNotes() {
+        if (scope.isPlatformAdmin()) return notes.findAll();
+        List<Note> all = notes.findByWorkspaceId(scope.workspaceId());
+        if (scope.seesTeamData()) return all;
+        String me = scope.id();
+        java.util.Set<String> leadIds = leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), me).stream()
+                .map(com.saarthix.crm.model.Lead::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        return all.stream()
+                .filter(n -> me.equals(n.getOwnerId())
+                        || (n.getLinkedId() != null && !n.getLinkedId().isBlank() && leadIds.contains(n.getLinkedId())))
+                .toList();
+    }
+
     private Note owned(String id) {
         return notes.findById(id)
-                .filter(n -> scope.sameWorkspace(n.getWorkspaceId()))
+                .filter(this::canSeeNote)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Note not found"));
+    }
+
+    private boolean canSeeNote(Note note) {
+        if (scope.canSee(note.getWorkspaceId(), note.getOwnerId())) return true;
+        if (note.getLinkedId() == null || note.getLinkedId().isBlank()) return false;
+        return leads.findById(note.getLinkedId())
+                .filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()))
+                .isPresent();
     }
 
     private boolean contains(String value, String query) {

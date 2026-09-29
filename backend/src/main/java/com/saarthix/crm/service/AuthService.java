@@ -62,6 +62,10 @@ public class AuthService {
         } else {
             user.setRole(Catalog.requireUserRole(request.role()));
         }
+        if (Catalog.SALES_EXECUTIVE.equals(user.getRole()) && invite.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Sales executives need a team code to join a workspace");
+        }
         if (!invite.isBlank()) {
             Workspace workspace = workspaces.findByInviteCodeIgnoreCase(invite)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "That invite code is not valid"));

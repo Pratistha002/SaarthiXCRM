@@ -117,7 +117,7 @@ public class LeadService {
             }
         });
         if (!previousName.equals(lead.getName())) {
-            notes.findByWorkspaceIdAndLinkedId(scope.workspaceId(), lead.getId()).forEach(note -> {
+            notes.findByWorkspaceIdAndLinkedId(lead.getWorkspaceId(), lead.getId()).forEach(note -> {
                 note.setLinkedName(lead.getName());
                 notes.save(note);
             });
@@ -163,7 +163,7 @@ public class LeadService {
         int removed = 0;
         if (request.ids() != null) {
             for (String id : request.ids()) {
-                leads.findById(id).filter(lead -> scope.sameWorkspace(lead.getWorkspaceId())).ifPresent(lead -> {
+                leads.findById(id).filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId())).ifPresent(lead -> {
                     activities.deleteForLead(lead.getId());
                     attachments.deleteByLeadId(lead.getId());
                     leads.delete(lead);
@@ -216,7 +216,14 @@ public class LeadService {
     }
 
     public List<Lead> workspaceLeads() {
-        List<Lead> all = leads.findByWorkspaceId(scope.workspaceId());
+        List<Lead> all;
+        if (scope.isPlatformAdmin()) {
+            all = leads.findAll();
+        } else if (scope.seesTeamData()) {
+            all = leads.findByWorkspaceId(scope.workspaceId());
+        } else {
+            all = leads.findByWorkspaceIdAndOwnerId(scope.workspaceId(), scope.id());
+        }
         all.forEach(this::decorate);
         return all;
     }
@@ -250,6 +257,9 @@ public class LeadService {
         User owner = resolveOwner(request.ownerId());
         lead.setOwnerId(owner.getId());
         lead.setOwnerName(owner.getName());
+        if (scope.isPlatformAdmin() && owner.getWorkspaceId() != null && !owner.getWorkspaceId().isBlank()) {
+            lead.setWorkspaceId(owner.getWorkspaceId());
+        }
         lead.setName(fullName);
         lead.setLeadType(type);
         lead.setContactPerson(student ? "" : nullToEmpty(request.contactPerson()));
@@ -316,7 +326,7 @@ public class LeadService {
         String mail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
         String firm = company == null ? "" : company.trim().toLowerCase(Locale.ROOT);
         String person = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
-        return leads.findByWorkspaceId(scope.workspaceId()).stream()
+        return workspaceLeads().stream()
                 .filter(lead -> excludeId == null || !excludeId.equals(lead.getId()))
                 .filter(lead -> {
                     boolean sameEmail = !mail.isBlank() && mail.equalsIgnoreCase(nullToEmpty(lead.getEmail()));
@@ -330,16 +340,16 @@ public class LeadService {
 
     private Lead owned(String id) {
         return leads.findById(id)
-                .filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()))
+                .filter(lead -> scope.canSee(lead.getWorkspaceId(), lead.getOwnerId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
     }
 
     private User resolveOwner(String ownerId) {
-        if (ownerId == null || ownerId.isBlank()) {
+        if (scope.assignedOnly() || ownerId == null || ownerId.isBlank()) {
             return scope.user();
         }
         return users.findById(ownerId)
-                .filter(user -> scope.workspaceId().equals(user.getWorkspaceId()))
+                .filter(user -> scope.isPlatformAdmin() || scope.workspaceId().equals(user.getWorkspaceId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "That teammate is not in this workspace"));
     }
 

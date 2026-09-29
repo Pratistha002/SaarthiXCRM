@@ -144,14 +144,16 @@ export default function Team() {
                       </select>
                     ) : <RolePill value={member.role} />}
                   </td>
-                  <td>{member.leads}</td>
-                  <td>{compact(member.openValue)}</td>
-                  <td className="font-medium">{compact(member.wonValue)}</td>
+                  <td>{member.leads == null ? '—' : member.leads}</td>
+                  <td>{member.openValue == null ? '—' : compact(member.openValue)}</td>
+                  <td className="font-medium">{member.wonValue == null ? '—' : compact(member.wonValue)}</td>
                   <td>
+                    {member.winRate == null ? '—' : (
                     <span className={cx('rounded-full px-2 py-1 text-xs',
                       member.winRate >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600')}>
                       {member.winRate}%
                     </span>
+                    )}
                   </td>
                   <td className="text-right">
                     {canManage && !member.isYou && (

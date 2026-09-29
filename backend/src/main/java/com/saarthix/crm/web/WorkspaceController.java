@@ -104,6 +104,11 @@ public class WorkspaceController {
         return tasks.status(id, request);
     }
 
+    @PostMapping("/api/followups/{id}/approve")
+    public FollowUp approve(@PathVariable String id) {
+        return tasks.approve(id);
+    }
+
     @DeleteMapping("/api/followups/{id}")
     public void deleteTask(@PathVariable String id) {
         tasks.delete(id);

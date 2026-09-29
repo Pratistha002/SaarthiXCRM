@@ -216,10 +216,20 @@ export function dueLabel(day) {
 
 export function isOverdue(task) {
   if (!task || task.status === 'Completed' || !task.dueDate) return false;
+  if (task.approvalStatus === 'Pending Approval') return false;
   if (task.dueAt) return new Date(task.dueAt) < new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(`${task.dueDate}T00:00:00`) < today;
+}
+
+export function isAwaitingApproval(task) {
+  return task?.approvalStatus === 'Pending Approval';
+}
+
+export function followUpStatusLabel(task) {
+  if (isAwaitingApproval(task)) return 'Pending Approval';
+  return task?.status || 'Pending';
 }
 
 export function downloadCsv(filename, rows) {
@@ -280,4 +290,8 @@ export function isPlatformAdmin(user) {
   if (user.platformAdmin) return true;
   const key = String(user.email || user.name || '').trim().toUpperCase();
   return key === 'ADMIN';
+}
+
+export function canSeeTeamData(user) {
+  return isPlatformAdmin(user) || isHeadOfSales(user?.role);
 }
