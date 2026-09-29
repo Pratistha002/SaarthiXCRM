@@ -7,6 +7,7 @@ import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.service.AttachmentService;
 import com.saarthix.crm.service.CallService;
 import com.saarthix.crm.service.FollowUpService;
+import com.saarthix.crm.model.Contact;
 import com.saarthix.crm.service.LeadDetailService;
 import com.saarthix.crm.service.LeadService;
 import jakarta.validation.Valid;
@@ -73,6 +74,11 @@ public class LeadController {
     public Map<String, Object> convert(@PathVariable String id,
                                        @RequestBody(required = false) LeadDetailService.ConvertRequest request) {
         return details.convert(id, request);
+    }
+
+    @PostMapping("/{id}/contacts")
+    public Contact addContact(@PathVariable String id, @RequestBody LeadDetailService.PersonRequest request) {
+        return details.addContact(id, request);
     }
 
     @PostMapping("/{id}/attachments")

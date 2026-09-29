@@ -101,7 +101,8 @@ public class CallService {
         if (stageChanged) {
             leadService.move(lead.getId(), new LeadService.StageRequest(stageAfter,
                     Catalog.isExit(stageAfter) ? request.closeReason() : null,
-                    Catalog.isExit(stageAfter) ? request.closeNote() : null));
+                    Catalog.isExit(stageAfter) ? request.closeNote() : null,
+                    "Call · " + outcomeText(call) + (call.getNotes().isBlank() ? "" : " — " + call.getNotes())));
         }
 
         Lead fresh = owned(lead.getId());
