@@ -277,7 +277,7 @@ const STAGE_TONES = {
   Lost: { bar: 'bg-rose-500', text: 'text-rose-600', pill: 'bg-rose-50 text-rose-600' },
 };
 
-function stageTone(name) {
+export function stageTone(name) {
   return STAGE_TONES[name] || { bar: 'bg-slate-400', text: 'text-slate-700', pill: 'bg-slate-100 text-slate-600' };
 }
 

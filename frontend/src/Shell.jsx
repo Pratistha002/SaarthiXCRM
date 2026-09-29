@@ -9,6 +9,7 @@ const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/leads', label: 'Leads' },
   { to: '/pipeline', label: 'Pipeline' },
+  { to: '/sales', label: 'Sales & Forecast' },
   { to: '/contacts', label: 'Contacts' },
   { to: '/follow-ups', label: 'Follow-ups' },
   { to: '/notes', label: 'Notes' },
@@ -21,6 +22,7 @@ function Icon({ name }) {
   if (name === 'bell') return <svg {...common}><path d="M6 9a6 6 0 1 1 12 0c0 7 2 7 2 7H4s2 0 2-7" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>;
   if (name === 'dash') return <svg {...common}><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>;
   if (name === 'leads') return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M4 19c.6-3 2.6-4.5 5-4.5S13.4 16 14 19" /><path d="M16 8h4M18 6v4" /></svg>;
+  if (name === 'chart') return <svg {...common}><path d="M4 20h16" /><path d="M7 16v-5M12 16V7M17 16v-8" strokeLinecap="round" /></svg>;
   if (name === 'pipe') return <svg {...common}><path d="M4 7h16M4 12h10M4 17h13" /></svg>;
   if (name === 'people') return <svg {...common}><circle cx="9" cy="9" r="3" /><circle cx="17" cy="10" r="2" /><path d="M3.5 19c.7-3 2.8-4.5 5.5-4.5s4.8 1.5 5.5 4.5M15 14.5c1.8.2 3.2 1.3 3.8 3.5" /></svg>;
   if (name === 'note') return <svg {...common}><path d="M7 4h8l4 4v12H7z" /><path d="M15 4v4h4M9 13h6M9 17h4" /></svg>;
@@ -31,6 +33,7 @@ const RAIL = [
   { to: '/dashboard', icon: 'dash', label: 'Dashboard' },
   { to: '/leads', icon: 'leads', label: 'Leads' },
   { to: '/pipeline', icon: 'pipe', label: 'Pipeline' },
+  { to: '/sales', icon: 'chart', label: 'Sales & Forecast' },
   { to: '/contacts', icon: 'people', label: 'Contacts' },
   { to: '/follow-ups', icon: 'task', label: 'Follow-ups' },
   { to: '/notes', icon: 'note', label: 'Notes' },
