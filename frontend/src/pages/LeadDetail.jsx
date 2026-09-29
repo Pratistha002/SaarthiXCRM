@@ -9,6 +9,7 @@ import {
 } from '../lib';
 import { Banner, Field, Modal, Spinner } from '../ui';
 import CallModal from './CallModal';
+import ConvertLeadModal from './ConvertLeadModal';
 import LeadForm from './LeadForm';
 
 const RELATED = [
@@ -33,6 +34,7 @@ export default function LeadDetail() {
   const [editing, setEditing] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [notice, setNotice] = useState('');
   const [closing, setClosing] = useState(null);
   const [menu, setMenu] = useState(false);
@@ -108,14 +110,17 @@ export default function LeadDetail() {
     }
   }
 
-  async function convert() {
-    if (!window.confirm(`Convert ${lead.name} to a contact?`)) return;
-    try {
-      await api(`/api/leads/${id}/convert`, { method: 'POST' });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
+  function convert() {
+    if (lead.convertedDealId) return;
+    setConverting(true);
+  }
+
+  async function converted(result) {
+    setConverting(false);
+    setNotice(result.deal
+      ? `Converted. ${result.deal.name} is now in the Sales Pipeline under Qualified.`
+      : `Converted. ${result.contact?.name} is now a contact at ${result.account?.name}.`);
+    await load();
   }
 
   async function remove() {
@@ -163,9 +168,13 @@ export default function LeadDetail() {
           <button type="button" className="btn !rounded-lg !py-2" onClick={() => setCallOpen({ number: primaryPhone(lead) })}>📞 Call</button>
           <button type="button" className="btn-ghost !rounded-lg !py-2" disabled title="WhatsApp is coming soon">💬 WhatsApp</button>
           <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>✉ Send Email</button>
-          <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={convert} disabled={Boolean(lead.convertedContactId)}>
-            {lead.convertedContactId ? 'Converted' : 'Convert'}
-          </button>
+          {lead.convertedDealId ? (
+            <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => navigate(`/deals/${lead.convertedDealId}`)}>Open Deal</button>
+          ) : (
+            <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={convert}>
+              {lead.convertedContactId ? 'Create Deal' : 'Convert'}
+            </button>
+          )}
           <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEditing(true)}>Edit</button>
           <div className="relative">
             <button type="button" className="btn-ghost !rounded-lg !px-3 !py-2" onClick={() => setMenu(!menu)} aria-label="More">•••</button>
@@ -231,7 +240,7 @@ export default function LeadDetail() {
             <>
               <OverviewCard lead={lead} onEmail={() => setEmailOpen(true)} onCall={(number) => setCallOpen({ number })} />
               <NotesSection lead={lead} notes={data.notes} onChange={load} />
-              <ConnectedSection lead={lead} contact={data.contact} onConvert={convert} />
+              <ConnectedSection lead={lead} contact={data.contact} account={data.account} deal={data.deal} onConvert={convert} />
               <AttachmentsSection lead={lead} files={data.attachments} onChange={load} />
               <ActivitiesSection lead={lead} open={data.openActivities} closed={data.closedActivities} calls={data.calls || []} members={members} user={user} onChange={load} />
               <EmailsSection emails={data.emails} onCompose={() => setEmailOpen(true)} />
@@ -243,6 +252,9 @@ export default function LeadDetail() {
       </div>
 
       {emailOpen && <SendEmailModal lead={lead} onClose={() => setEmailOpen(false)} onSent={load} />}
+      {converting && (
+        <ConvertLeadModal lead={lead} contact={data.contact} members={members} onClose={() => setConverting(false)} onConverted={converted} />
+      )}
       {callOpen && (
         <CallModal
           lead={lead}
@@ -376,7 +388,7 @@ function detailRows(lead) {
   return rows;
 }
 
-function stamp(iso) {
+export function stamp(iso) {
   return iso ? `${prettyDate(iso)} • ${prettyTime(iso)}` : '—';
 }
 
@@ -426,7 +438,7 @@ function OverviewCard({ lead, onEmail, onCall }) {
   );
 }
 
-function Info({ label, children }) {
+export function Info({ label, children }) {
   return (
     <div className="grid grid-cols-[140px_1fr] items-center gap-6 text-sm sm:grid-cols-[170px_1fr]">
       <dt className="text-right text-slate-500">{label}</dt>
@@ -445,7 +457,7 @@ function PhoneLink({ value, onCall }) {
   );
 }
 
-function Section({ id, title, action, children }) {
+export function Section({ id, title, action, children }) {
   return (
     <section id={`related-${id}`} className="scroll-mt-4 rounded-2xl bg-white p-5 ring-1 ring-slate-100">
       <div className="mb-3 flex items-center justify-between">
@@ -457,7 +469,7 @@ function Section({ id, title, action, children }) {
   );
 }
 
-function Empty({ children }) {
+export function Empty({ children }) {
   return <p className="py-3 text-sm text-slate-400">{children}</p>;
 }
 
@@ -506,22 +518,40 @@ function NotesSection({ lead, notes, onChange }) {
   );
 }
 
-function ConnectedSection({ lead, contact, onConvert }) {
+function ConnectedSection({ lead, contact, account, deal, onConvert }) {
   const navigate = useNavigate();
+  const rows = [
+    account && { key: 'account', kind: 'Account', name: account.name, note: account.type || 'Organisation', to: `/accounts/${account.id}` },
+    contact && { key: 'contact', kind: 'Contact', name: contact.name, note: `${contact.company || 'No company'} · converted ${ago(lead.convertedAt)}`, to: `/contacts/${contact.id}` },
+    deal && { key: 'deal', kind: 'Deal', name: deal.name, note: `${deal.stage} · ${money(deal.value)}`, to: `/deals/${deal.id}` },
+  ].filter(Boolean);
   return (
     <Section id="connected" title="Connected Records">
       {contact ? (
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-          <div>
-            <p className="font-medium">{contact.name}</p>
-            <p className="text-xs text-slate-500">Contact · {contact.company || 'No company'} · converted {ago(lead.convertedAt)}</p>
-          </div>
-          <button type="button" className="text-sm font-medium text-blue-600" onClick={() => navigate('/contacts')}>Open contacts</button>
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div key={row.key} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
+              <div>
+                <p className="font-medium">
+                  <span className="mr-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">{row.kind}</span>
+                  {row.name}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">{row.note}</p>
+              </div>
+              <button type="button" className="text-sm font-medium text-blue-600" onClick={() => navigate(row.to)}>Open</button>
+            </div>
+          ))}
+          {!deal && (
+            <div className="flex items-center justify-between">
+              <Empty>No deal was created for this lead.</Empty>
+              <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onConvert}>Create deal</button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-between">
           <Empty>This lead hasn’t been converted yet.</Empty>
-          <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onConvert}>Convert to contact</button>
+          <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onConvert}>Convert lead</button>
         </div>
       )}
     </Section>
@@ -604,16 +634,16 @@ function AttachmentsSection({ lead, files, onChange }) {
   );
 }
 
-function size(bytes) {
+export function size(bytes) {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function dueText(task) {
+export function dueText(task) {
   return task.dueAt ? `${dueLabel(task.dueDate)} • ${prettyTime(task.dueAt)}` : dueLabel(task.dueDate);
 }
 
-function callResult(call = {}) {
+export function callResult(call = {}) {
   if (call.outcome !== 'Connected') return call.outcome;
   return `Connected · ${call.customerResponse === 'Other' ? call.customerResponseOther : call.customerResponse}`;
 }
@@ -743,11 +773,11 @@ const HISTORY_FILTERS = [
 
 const ICONS = { call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
 
-function dayKey(iso) {
+export function dayKey(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function groupByDay(items) {
+export function groupByDay(items) {
   const groups = [];
   items.forEach((item) => {
     const key = dayKey(item.createdAt);
@@ -758,13 +788,13 @@ function groupByDay(items) {
   return groups;
 }
 
-function splitChange(detail = '') {
+export function splitChange(detail = '') {
   const [change, ...rest] = detail.split(' · ');
   const [from, to] = change.split(' → ');
   return { from, to, extra: rest.join(' · ') };
 }
 
-function CallEntry({ item, lead }) {
+export function CallEntry({ item, lead }) {
   const call = item.call || {};
   const connected = call.outcome === 'Connected';
   return (

@@ -132,6 +132,46 @@ export function colorFor(name = '') {
   return COLORS[hash];
 }
 
+export const CLOSE_RANGES = ['Any time', 'Today', 'This Week', 'This Month', 'Next Month', 'Custom'];
+export const CLOSED_PERIODS = ['This Month', 'Last Month', 'This Quarter', 'This Year', 'All time'];
+
+/** Local-calendar date range (yyyy-MM-dd) for the pipeline's date filters. */
+export function dateRange(key) {
+  const now = new Date();
+  const day = (d) => isoDay(d);
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  switch (key) {
+    case 'Today': return { from: day(now), to: day(now) };
+    case 'This Week': {
+      const start = new Date(now);
+      start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return { from: day(start), to: day(end) };
+    }
+    case 'This Month': return { from: day(new Date(y, m, 1)), to: day(new Date(y, m + 1, 0)) };
+    case 'Next Month': return { from: day(new Date(y, m + 1, 1)), to: day(new Date(y, m + 2, 0)) };
+    case 'Last Month': return { from: day(new Date(y, m - 1, 1)), to: day(new Date(y, m, 0)) };
+    case 'This Quarter': {
+      const q = Math.floor(m / 3) * 3;
+      return { from: day(new Date(y, q, 1)), to: day(new Date(y, q + 3, 0)) };
+    }
+    case 'This Year': return { from: day(new Date(y, 0, 1)), to: day(new Date(y, 11, 31)) };
+    default: return { from: '', to: '' };
+  }
+}
+
+const ACTION_ICONS = { Call: '📞', 'Follow-up': '📞', Meeting: '📅', Demo: '📅', 'Send Proposal': '📧', Email: '📧', WhatsApp: '💬' };
+
+export function nextActionLabel(action) {
+  if (!action) return null;
+  const when = action.dueAt
+    ? `${new Date(action.dueAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}, ${prettyTime(action.dueAt)}`
+    : new Date(`${action.dueDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  return { icon: ACTION_ICONS[action.type] || '☑', type: action.type, when };
+}
+
 export function money(value) {
   return `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 }

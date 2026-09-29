@@ -42,6 +42,29 @@ public final class Catalog {
             "Junk", 0,
             "Not Interested", 0,
             "Lost", 0);
+    public static final String DEAL_WON = "Won";
+    public static final String DEAL_LOST = "Lost";
+    public static final List<String> DEAL_ACTIVE_STAGES = List.of("Qualified", "Demo / Meeting", "Proposal", "Negotiation");
+    public static final List<String> DEAL_STAGES = List.of(
+            "Qualified", "Demo / Meeting", "Proposal", "Negotiation", DEAL_WON, DEAL_LOST);
+    /** Default win probability per deal stage. Deals store their own copy so this can become per-workspace later. */
+    public static final Map<String, Integer> DEAL_PROBABILITY = Map.of(
+            "Qualified", 20,
+            "Demo / Meeting", 40,
+            "Proposal", 60,
+            "Negotiation", 80,
+            DEAL_WON, 100,
+            DEAL_LOST, 0);
+    public static final List<String> DEAL_LOST_REASONS = List.of(
+            "Price", "Competitor", "No Budget", "Timing", "Not Interested", "No Response", "Requirement Changed", "Other");
+    public static final List<String> PRODUCTS = List.of("TalentX");
+
+    public static String dealStatus(String stage) {
+        if (DEAL_WON.equals(stage)) return DEAL_WON;
+        if (DEAL_LOST.equals(stage)) return DEAL_LOST;
+        return "Open";
+    }
+
     public static final String CONNECTED = "Connected";
     public static final List<String> CALL_OUTCOMES = List.of(
             CONNECTED, "No Answer", "Busy", "Wrong Number", "Call Back Later");

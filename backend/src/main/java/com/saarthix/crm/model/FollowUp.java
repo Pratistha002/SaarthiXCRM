@@ -28,6 +28,10 @@ public class FollowUp {
     private String status;
     private String leadId;
     private String leadName;
+    private String dealId;
+    private String dealName;
+    private String accountId;
+    private String contactId;
     private String assigneeId;
     private String assigneeName;
     private String remindedOn;

@@ -16,6 +16,10 @@ public class Activity {
     private String workspaceId;
     @Indexed
     private String leadId;
+    @Indexed
+    private String dealId;
+    private String accountId;
+    private String contactId;
     private String type;
     private String title;
     private String detail;

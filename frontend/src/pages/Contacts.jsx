@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { cx } from '../lib';
 import { Avatar, Field, Modal } from '../ui';
@@ -101,7 +102,7 @@ export default function Contacts() {
               <div className="flex items-start gap-3">
                 <Avatar name={contact.name} />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{contact.name}</p>
+                  <Link to={`/contacts/${contact.id}`} className="font-semibold hover:text-blue-600 hover:underline">{contact.name}</Link>
                   <p className="truncate text-xs text-slate-400">{contact.title}{contact.title && contact.company ? ' · ' : ''}{contact.company}</p>
                 </div>
                 <button type="button" className={cx('text-lg', contact.favorite ? 'text-amber-400' : 'text-slate-300')} onClick={() => star(contact)} aria-label="Favorite">★</button>

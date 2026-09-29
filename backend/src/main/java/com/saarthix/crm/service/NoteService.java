@@ -1,6 +1,7 @@
 package com.saarthix.crm.service;
 
 import com.saarthix.crm.model.Note;
+import com.saarthix.crm.repo.DealRepository;
 import com.saarthix.crm.repo.LeadRepository;
 import com.saarthix.crm.repo.NoteRepository;
 import com.saarthix.crm.security.Scope;
@@ -19,12 +20,14 @@ import java.util.Map;
 public class NoteService {
     private final NoteRepository notes;
     private final LeadRepository leads;
+    private final DealRepository deals;
     private final ActivityService activities;
     private final Scope scope;
 
-    public NoteService(NoteRepository notes, LeadRepository leads, ActivityService activities, Scope scope) {
+    public NoteService(NoteRepository notes, LeadRepository leads, DealRepository deals, ActivityService activities, Scope scope) {
         this.notes = notes;
         this.leads = leads;
+        this.deals = deals;
         this.activities = activities;
         this.scope = scope;
     }
@@ -69,6 +72,11 @@ public class NoteService {
             leads.findById(note.getLinkedId())
                     .filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()))
                     .ifPresent(lead -> activities.log(lead, scope.user(), "note", "Note added", note.getBody()));
+        }
+        if ("deal".equals(note.getLinkedType()) && note.getLinkedId() != null && !note.getLinkedId().isBlank()) {
+            deals.findById(note.getLinkedId())
+                    .filter(deal -> scope.sameWorkspace(deal.getWorkspaceId()))
+                    .ifPresent(deal -> activities.logDeal(deal, scope.user(), "note", "Note added", note.getBody()));
         }
         return note;
     }

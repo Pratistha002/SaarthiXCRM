@@ -6,25 +6,26 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 @Data
-@Document(collection = "contacts")
-public class Contact {
+@Document(collection = "accounts")
+public class Account {
     @Id
     private String id;
     @Indexed
     private String workspaceId;
-    private String ownerId;
     private String name;
-    private String title;
-    private String company;
+    /** Lower-cased, trimmed name used to avoid creating the same organisation twice. */
     @Indexed
-    private String accountId;
-    private String email;
+    private String nameKey;
+    private String type;
+    private String website;
     private String phone;
-    private List<String> tags = new ArrayList<>();
-    private boolean favorite;
+    private String industry;
+    private String city;
+    private String state;
+    private String country;
+    private String ownerId;
     private Instant createdAt;
+    private Instant updatedAt;
 }
