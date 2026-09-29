@@ -83,6 +83,7 @@ public class LeadDetailService {
         body.put("attachments", attachments.findByLeadIdOrderByCreatedAtDesc(id));
         body.put("contact", lead.getConvertedContactId() == null ? null
                 : contacts.findById(lead.getConvertedContactId()).orElse(null));
+        body.put("contacts", contactsOf(lead));
         body.put("account", lead.getConvertedAccountId() == null ? null
                 : accountService.owned(lead.getConvertedAccountId()));
         body.put("deal", lead.getConvertedDealId() == null ? null
@@ -131,16 +132,44 @@ public class LeadDetailService {
         String accountName = request == null || blank(request.accountName()) ? lead.getCompany() : request.accountName();
         if (blank(accountName)) accountName = lead.getName();
         String person = request == null || blank(request.contactName()) ? defaultPerson : request.contactName().trim();
+        List<PersonRequest> people = request == null || request.contacts() == null ? List.of() : request.contacts().stream()
+                .filter(Objects::nonNull)
+                .filter(p -> !blank(p.name()) || !blank(p.email()) || !blank(p.phone()) || !blank(p.title()))
+                .toList();
+        if (people.isEmpty()) {
+            people = List.of(new PersonRequest(person, student ? "Student" : "", lead.getEmail(),
+                    blank(lead.getPhone()) ? lead.getMobile() : lead.getPhone()));
+        }
+        if (!alreadyConverted) {
+            for (PersonRequest p : people) {
+                if (blank(p.name())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Every point of contact needs a name");
+                if (!blank(p.email()) && !p.email().trim().matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email for " + p.name().trim());
+                }
+            }
+        }
 
         Account account = accountService.findOrCreate(accountName, lead);
-        Contact contact = alreadyConverted
-                ? contacts.findById(lead.getConvertedContactId()).orElseGet(() -> linkContact(lead, account, person, student))
-                : linkContact(lead, account, person, student);
-        if (!Objects.equals(contact.getAccountId(), account.getId()) && blank(contact.getAccountId())) {
-            contact.setAccountId(account.getId());
-            if (blank(contact.getCompany())) contact.setCompany(account.getName());
-            contacts.save(contact);
+        List<Contact> linked = new ArrayList<>();
+        if (alreadyConverted) {
+            PersonRequest primary = people.get(0);
+            linked.add(contacts.findById(lead.getConvertedContactId()).orElseGet(() -> linkContact(lead, account, primary, student)));
+            contactsOf(lead).stream().filter(c -> linked.stream().noneMatch(l -> l.getId().equals(c.getId()))).forEach(linked::add);
+        } else {
+            for (PersonRequest p : people) {
+                Contact c = linkContact(lead, account, p, student);
+                if (linked.stream().noneMatch(l -> l.getId().equals(c.getId()))) linked.add(c);
+            }
+            contactsOf(lead).stream().filter(c -> linked.stream().noneMatch(l -> l.getId().equals(c.getId()))).forEach(linked::add);
         }
+        for (Contact c : linked) {
+            if (!Objects.equals(c.getAccountId(), account.getId()) && blank(c.getAccountId())) {
+                c.setAccountId(account.getId());
+                if (blank(c.getCompany())) c.setCompany(account.getName());
+                contacts.save(c);
+            }
+        }
+        Contact contact = linked.get(0);
 
         Deal deal = null;
         if (createDeal) {
@@ -158,6 +187,7 @@ public class LeadDetailService {
         String previousStage = lead.getStage();
         Instant now = Instant.now();
         lead.setConvertedContactId(contact.getId());
+        lead.setContactIds(new ArrayList<>(linked.stream().map(Contact::getId).toList()));
         lead.setConvertedAccountId(account.getId());
         lead.setConvertedDealId(deal == null ? null : deal.getId());
         if (lead.getConvertedAt() == null) lead.setConvertedAt(now);
@@ -169,46 +199,99 @@ public class LeadDetailService {
             lead.setClosedAt(now);
         }
         leads.save(lead);
-        String summary = "Account: " + account.getName() + " · Contact: " + contact.getName()
+        String summary = "Account: " + account.getName()
+                + (linked.size() == 1 ? " · Contact: " : " · Contacts: ")
+                + String.join(", ", linked.stream().map(Contact::getName).toList())
                 + (deal == null ? "" : " · Deal: " + deal.getName() + " (" + DealService.inr(deal.getValue()) + ")");
         activities.log(lead, scope.user(), "converted", alreadyConverted ? "Deal created from lead" : "Lead converted", summary);
         if (!Catalog.isWon(previousStage)) {
-            activities.log(lead, scope.user(), "stage", "Moved to " + Catalog.CONVERTED,
-                    previousStage + " → " + Catalog.CONVERTED);
+            activities.logStage(lead, scope.user(), previousStage, Catalog.CONVERTED,
+                    previousStage + " → " + Catalog.CONVERTED, "Converted · " + summary);
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("lead", leadService.get(id));
         body.put("account", account);
         body.put("contact", contact);
+        body.put("contacts", linked);
         body.put("deal", deal);
         return body;
     }
 
+    /** Adds a point of contact to the lead. Before conversion it has no account yet; conversion attaches one. */
+    public Contact addContact(String id, PersonRequest request) {
+        Lead lead = owned(id);
+        if (request == null || blank(request.name())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name is required");
+        }
+        if (!blank(request.email()) && !request.email().trim().matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email");
+        }
+        Account account = blank(lead.getConvertedAccountId()) ? null : accountService.owned(lead.getConvertedAccountId());
+        PersonRequest person = new PersonRequest(request.name().trim(), request.title(), request.email(), request.phone());
+        Contact contact = linkContact(lead, account, person, "Student".equals(lead.getLeadType()));
+        List<Contact> current = contactsOf(lead);
+        if (current.stream().anyMatch(c -> c.getId().equals(contact.getId()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, contact.getName() + " is already a point of contact for this lead");
+        }
+        if (account != null && blank(contact.getAccountId())) {
+            contact.setAccountId(account.getId());
+            contact.setCompany(account.getName());
+            contacts.save(contact);
+        }
+        List<String> ids = new ArrayList<>(current.stream().map(Contact::getId).toList());
+        ids.add(contact.getId());
+        lead.setContactIds(ids);
+        lead.setUpdatedAt(Instant.now());
+        leads.save(lead);
+        activities.log(lead, scope.user(), "contact", "Point of contact added",
+                contact.getName() + (blank(contact.getTitle()) ? "" : " · " + contact.getTitle()));
+        return contact;
+    }
+
+    /** Points of contact created at conversion, primary first. Leads converted earlier only have the primary one. */
+    private List<Contact> contactsOf(Lead lead) {
+        List<String> ids = new ArrayList<>(lead.getContactIds() == null ? List.of() : lead.getContactIds());
+        if (!blank(lead.getConvertedContactId()) && !ids.contains(lead.getConvertedContactId())) {
+            ids.add(0, lead.getConvertedContactId());
+        }
+        Map<String, Contact> found = new LinkedHashMap<>();
+        contacts.findAllById(ids).forEach(c -> found.put(c.getId(), c));
+        return ids.stream().map(found::get).filter(Objects::nonNull).toList();
+    }
+
     /** Reuses a contact with the same email, or the same name at this account, before creating a new one. */
-    private Contact linkContact(Lead lead, Account account, String person, boolean student) {
+    private Contact linkContact(Lead lead, Account account, PersonRequest details, boolean student) {
         String workspace = lead.getWorkspaceId();
-        String email = nullToEmpty(lead.getEmail()).toLowerCase(java.util.Locale.ROOT);
+        String person = nullToEmpty(details.name());
+        String email = nullToEmpty(details.email()).toLowerCase(java.util.Locale.ROOT);
         List<Contact> all = contacts.findByWorkspaceId(workspace);
         java.util.Optional<Contact> match = all.stream()
                 .filter(c -> !email.isBlank() && email.equalsIgnoreCase(nullToEmpty(c.getEmail())))
                 .findFirst();
-        if (match.isEmpty()) {
+        if (match.isEmpty() && account != null) {
             match = all.stream()
                     .filter(c -> person.equalsIgnoreCase(nullToEmpty(c.getName())))
                     .filter(c -> account.getId().equals(c.getAccountId())
                             || (blank(c.getAccountId()) && AccountService.key(c.getCompany()).equals(account.getNameKey())))
                     .findFirst();
         }
-        if (match.isPresent()) return match.get();
+        if (match.isPresent()) {
+            Contact existing = match.get();
+            boolean changed = false;
+            if (blank(existing.getTitle()) && !blank(details.title())) { existing.setTitle(details.title().trim()); changed = true; }
+            if (blank(existing.getEmail()) && !email.isBlank()) { existing.setEmail(nullToEmpty(details.email())); changed = true; }
+            if (blank(existing.getPhone()) && !blank(details.phone())) { existing.setPhone(details.phone().trim()); changed = true; }
+            return changed ? contacts.save(existing) : existing;
+        }
         Contact contact = new Contact();
         contact.setWorkspaceId(workspace);
-        contact.setOwnerId(scope.id());
+        contact.setOwnerId(blank(lead.getOwnerId()) ? scope.id() : lead.getOwnerId());
         contact.setName(person);
-        contact.setTitle(student ? "Student" : "");
-        contact.setCompany(account.getName());
-        contact.setAccountId(account.getId());
-        contact.setEmail(nullToEmpty(lead.getEmail()));
-        contact.setPhone(blank(lead.getPhone()) ? nullToEmpty(lead.getMobile()) : lead.getPhone());
+        contact.setTitle(blank(details.title()) ? (student ? "Student" : "") : details.title().trim());
+        contact.setCompany(account != null ? account.getName() : nullToEmpty(blank(lead.getCompany()) ? lead.getName() : lead.getCompany()));
+        contact.setAccountId(account != null ? account.getId() : null);
+        contact.setEmail(nullToEmpty(details.email()));
+        contact.setPhone(nullToEmpty(details.phone()));
         List<String> tags = new ArrayList<>(lead.getTags() == null ? List.of() : lead.getTags());
         if (!blank(lead.getLeadType()) && !tags.contains(lead.getLeadType())) tags.add(lead.getLeadType());
         contact.setTags(tags);
@@ -250,7 +333,11 @@ public class LeadDetailService {
     public record TagsRequest(List<String> tags) {
     }
 
-    public record ConvertRequest(String accountName, String contactName, Boolean createDeal, NewDealRequest deal) {
+    public record ConvertRequest(String accountName, String contactName, List<PersonRequest> contacts, Boolean createDeal,
+                                 NewDealRequest deal) {
+    }
+
+    public record PersonRequest(String name, String title, String email, String phone) {
     }
 
     public record NewDealRequest(String name, String product, Long value, String expectedCloseDate, String priority,

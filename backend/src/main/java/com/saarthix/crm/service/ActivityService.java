@@ -24,6 +24,14 @@ public class ActivityService {
         activities.save(build(lead, actor, type, title, detail));
     }
 
+    public Activity logStage(Lead lead, User actor, String from, String to, String detail, String outcome) {
+        Activity activity = build(lead, actor, "stage", "Moved to " + to, detail);
+        activity.setFromStage(from);
+        activity.setToStage(to);
+        activity.setOutcome(outcome == null ? "" : outcome.trim());
+        return activities.save(activity);
+    }
+
     public Activity logCall(Lead lead, User actor, String title, String detail, CallLog call) {
         Activity activity = build(lead, actor, "call", title, detail);
         activity.setCall(call);

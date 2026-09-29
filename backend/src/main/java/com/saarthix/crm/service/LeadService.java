@@ -124,8 +124,7 @@ public class LeadService {
         }
         User me = scope.user();
         if (previousStage != null && !previousStage.equals(lead.getStage())) {
-            activities.log(lead, me, "stage", "Moved to " + lead.getStage(),
-                    closeDetail(previousStage, lead));
+            activities.logStage(lead, me, previousStage, lead.getStage(), closeDetail(previousStage, lead), "Changed from Edit Lead");
         }
         if (previousOwner != null && !previousOwner.equals(lead.getOwnerId())) {
             activities.log(lead, me, "owner", "Owner changed",
@@ -141,13 +140,20 @@ public class LeadService {
 
     public Lead move(String id, StageRequest request) {
         Catalog.require(request.stage(), Catalog.STAGES, "Stage");
+        if (blank(request.outcome()) && blank(request.closeNote())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Describe the outcome of this status change");
+        }
         Lead lead = owned(id);
         String previous = lead.getStage();
+        if (request.stage().equals(previous)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The lead is already " + previous);
+        }
         applyClose(lead, request.stage(), request.closeReason(), request.closeNote());
         lead.setStage(request.stage());
         lead.setUpdatedAt(Instant.now());
         leads.save(lead);
-        activities.log(lead, scope.user(), "stage", "Moved to " + lead.getStage(), closeDetail(previous, lead));
+        String outcome = blank(request.outcome()) ? nullToEmpty(request.closeNote()) : request.outcome();
+        activities.logStage(lead, scope.user(), previous, lead.getStage(), closeDetail(previous, lead), outcome);
         decorate(lead);
         return lead;
     }
@@ -508,7 +514,7 @@ public class LeadService {
             String closeNote) {
     }
 
-    public record StageRequest(@NotBlank String stage, String closeReason, String closeNote) {
+    public record StageRequest(@NotBlank String stage, String closeReason, String closeNote, String outcome) {
     }
 
     public record IdsRequest(List<String> ids) {

@@ -14,7 +14,6 @@ import LeadForm from './LeadForm';
 
 const RELATED = [
   ['notes', 'Notes'],
-  ['connected', 'Connected Records'],
   ['attachments', 'Attachments'],
   ['open', 'Open Activities'],
   ['closed', 'Closed Activities'],
@@ -35,6 +34,7 @@ export default function LeadDetail() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [scheduleSignal, setScheduleSignal] = useState(0);
   const [notice, setNotice] = useState('');
   const [closing, setClosing] = useState(null);
   const [menu, setMenu] = useState(false);
@@ -92,22 +92,20 @@ export default function LeadDetail() {
   const nextId = index >= 0 && index < ids.length - 1 ? ids[index + 1] : null;
   const go = (target) => navigate(`/leads/${target}`, { state: { ids } });
 
-  async function moveStage(stage, closeReason = '', closeNote = '') {
-    if (isExitStage(stage) && !closeReason) {
-      setClosing(stage);
-      return;
-    }
+  function moveStage(stage) {
+    if (stage === lead.stage) return;
     if (stage === 'Converted' && !lead.convertedContactId) {
-      await convert();
+      convert();
       return;
     }
-    try {
-      await api(`/api/leads/${id}/stage`, { method: 'PATCH', body: { stage, closeReason, closeNote } });
-      setClosing(null);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
+    setClosing(stage);
+  }
+
+  async function confirmStage(body) {
+    await api(`/api/leads/${id}/stage`, { method: 'PATCH', body: { stage: closing, ...body } });
+    setNotice(`Lead status changed: ${lead.stage} → ${closing}. The outcome is saved in the Timeline.`);
+    setClosing(null);
+    await load();
   }
 
   function convert() {
@@ -143,9 +141,17 @@ export default function LeadDetail() {
     setTimeout(() => document.getElementById(`related-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   }
 
+  const isConverted = lead.stage === 'Converted' || Boolean(lead.convertedContactId);
+  const closed = isExitStage(lead.stage);
+  const qualified = lead.stage === 'Qualified';
+
+  function scheduleFollowUp() {
+    setTab('overview');
+    setScheduleSignal((n) => n + 1);
+  }
+
   const counts = {
     notes: data.notes.length,
-    connected: data.contact ? 1 : 0,
     attachments: data.attachments.length,
     open: data.openActivities.length,
     closed: data.closedActivities.length + (data.calls?.length || 0),
@@ -165,15 +171,25 @@ export default function LeadDetail() {
           <Tags lead={lead} onChange={load} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="btn !rounded-lg !py-2" onClick={() => setCallOpen({ number: primaryPhone(lead) })}>📞 Call</button>
-          <button type="button" className="btn-ghost !rounded-lg !py-2" disabled title="WhatsApp is coming soon">💬 WhatsApp</button>
-          <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>✉ Send Email</button>
-          {lead.convertedDealId ? (
-            <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => navigate(`/deals/${lead.convertedDealId}`)}>Open Deal</button>
+          {isConverted ? (
+            <>
+              {data.deal
+                ? <button type="button" className="btn !rounded-lg !py-2" onClick={() => navigate(`/deals/${data.deal.id}`)}>View Deal</button>
+                : <button type="button" className="btn !rounded-lg !py-2" onClick={convert}>Create Deal</button>}
+              <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setCallOpen({ number: primaryPhone(lead) })}>📞 Call</button>
+              {data.contact && <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => navigate(`/contacts/${data.contact.id}`)}>View Contact</button>}
+              <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>✉ Send Email</button>
+            </>
           ) : (
-            <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={convert}>
-              {lead.convertedContactId ? 'Create Deal' : 'Convert'}
-            </button>
+            <>
+              {!closed && (
+                <button type="button" className={cx(qualified ? 'btn-ghost' : 'btn', '!rounded-lg !py-2')} onClick={() => setCallOpen({ number: primaryPhone(lead) })}>📞 Call</button>
+              )}
+              <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEmailOpen(true)}>✉ Send Email</button>
+              {!closed && (
+                <button type="button" className={cx(qualified ? 'btn' : 'btn-ghost', '!rounded-lg !py-2')} onClick={convert}>Convert Lead</button>
+              )}
+            </>
           )}
           <button type="button" className="btn-ghost !rounded-lg !py-2" onClick={() => setEditing(true)}>Edit</button>
           <div className="relative">
@@ -181,7 +197,7 @@ export default function LeadDetail() {
             {menu && (
               <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-200">
                 <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenu(false); window.print(); }}>Print</button>
-                <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={remove}>Delete</button>
+                {!isConverted && <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={remove}>Delete</button>}
               </div>
             )}
           </div>
@@ -238,11 +254,19 @@ export default function LeadDetail() {
 
           {tab === 'overview' ? (
             <>
-              <OverviewCard lead={lead} onEmail={() => setEmailOpen(true)} onCall={(number) => setCallOpen({ number })} />
+              <LeadInformation lead={lead} contacts={data.contacts} onChange={load} />
+              <NextActionCard
+                tasks={data.openActivities}
+                user={user}
+                onAdd={scheduleFollowUp}
+                onViewAll={() => jump('open')}
+                onChange={load}
+                onError={setError}
+              />
+              <LeadSummary lead={lead} onEmail={() => setEmailOpen(true)} onCall={(number) => setCallOpen({ number })} />
               <NotesSection lead={lead} notes={data.notes} onChange={load} />
-              <ConnectedSection lead={lead} contact={data.contact} account={data.account} deal={data.deal} onConvert={convert} />
               <AttachmentsSection lead={lead} files={data.attachments} onChange={load} />
-              <ActivitiesSection lead={lead} open={data.openActivities} closed={data.closedActivities} calls={data.calls || []} members={members} user={user} onChange={load} />
+              <ActivitiesSection lead={lead} open={data.openActivities} closed={data.closedActivities} calls={data.calls || []} members={members} user={user} onChange={load} formSignal={scheduleSignal} />
               <EmailsSection emails={data.emails} onCompose={() => setEmailOpen(true)} />
             </>
           ) : (
@@ -253,18 +277,19 @@ export default function LeadDetail() {
 
       {emailOpen && <SendEmailModal lead={lead} onClose={() => setEmailOpen(false)} onSent={load} />}
       {converting && (
-        <ConvertLeadModal lead={lead} contact={data.contact} members={members} onClose={() => setConverting(false)} onConverted={converted} />
+        <ConvertLeadModal lead={lead} contact={data.contact} contacts={data.contacts} members={members} onClose={() => setConverting(false)} onConverted={converted} />
       )}
       {callOpen && (
         <CallModal
           lead={lead}
           phone={callOpen.number}
+          showStatus={!isConverted}
           onClose={() => setCallOpen(false)}
           onSaved={callSaved}
           onEditLead={() => { setCallOpen(false); setEditing(true); }}
         />
       )}
-      {closing && <CloseModal stage={closing} onClose={() => setClosing(null)} onSubmit={(reason, note) => moveStage(closing, reason, note)} />}
+      {closing && <StageChangeModal from={lead.stage} to={closing} onClose={() => setClosing(null)} onSubmit={confirmStage} />}
     </div>
   );
 }
@@ -365,75 +390,252 @@ function StageBar({ stage, onMove }) {
   );
 }
 
-function detailRows(lead) {
-  const type = lead.leadType;
-  const rows = [['Lead Type', type || '—']];
-  if (type === 'Student') {
-    rows.push(['First Name', lead.firstName], ['Last Name', lead.lastName], ['College Name', lead.collegeName], ['Course', lead.course], ['Branch', lead.branch]);
-  } else if (type === 'Institute') {
-    rows.push(['Institute Name', lead.company], ['Contact Person', lead.contactPerson], ['Website', lead.website], ['Rating', lead.rating]);
-  } else if (type === 'Industry') {
-    rows.push(
-      ['Company Name', lead.company], ['Contact Person', lead.contactPerson], ['Fax', lead.fax], ['Website', lead.website],
-      ['No. of Employees', lead.employees], ['Annual Revenue', lead.annualRevenue != null ? money(lead.annualRevenue) : ''], ['Rating', lead.rating],
-    );
-  } else {
-    rows.push(['Name', lead.name], ['Company', lead.company]);
-  }
-  rows.push(
-    ['Lead Source', lead.source], ['Deal Value', money(lead.value)], ['Priority', lead.priority],
-    ['Created', `${prettyDate(lead.createdAt)} ${prettyTime(lead.createdAt)}`],
-  );
-  if (lead.closeReason) rows.push([`${lead.stage} Reason`, lead.closeNote ? `${lead.closeReason} — ${lead.closeNote}` : lead.closeReason]);
-  return rows;
-}
-
 export function stamp(iso) {
   return iso ? `${prettyDate(iso)} • ${prettyTime(iso)}` : '—';
 }
 
-function OverviewCard({ lead, onEmail, onCall }) {
-  const [details, setDetails] = useState(false);
-  const address = [lead.building, lead.street, lead.city, lead.state, lead.zip, lead.country].filter(Boolean);
+function Muted({ children }) {
+  return <span className="text-slate-400">{children}</span>;
+}
+
+function orMuted(value, empty = 'Not provided') {
+  return value === 0 || (value != null && String(value).trim() !== '') ? value : <Muted>{empty}</Muted>;
+}
+
+export function PriorityText({ value }) {
+  if (!value) return <Muted>Not set</Muted>;
+  if (value === 'High') return <span className="font-medium text-rose-600">🔥 High</span>;
+  return <span className={value === 'Low' ? 'text-slate-500' : 'text-slate-800'}>{value}</span>;
+}
+
+function LeadSummary({ lead, onEmail, onCall }) {
+  const overdue = lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date();
   return (
-    <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-100">
-      <dl className="space-y-4">
-        <Info label="Lead Owner">{lead.ownerName || '—'}</Info>
-        <Info label="Email">
-          {lead.email ? <button type="button" className="text-blue-600 hover:underline" onClick={onEmail}>{lead.email}</button> : '—'}
-        </Info>
-        {lead.leadType !== 'Student' && <Info label="Phone"><PhoneLink value={lead.phone} onCall={() => onCall(lead.phone)} /></Info>}
-        <Info label="Mobile"><PhoneLink value={lead.mobile} onCall={() => onCall(lead.mobile)} /></Info>
-        <Info label="Lead Status">{lead.stage}</Info>
-        <Info label="Last Contacted">{stamp(lead.lastContactedAt)}</Info>
-        <Info label="Next Follow-up">
-          <span className={cx(lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date() && 'text-rose-600')}>{stamp(lead.nextFollowUpAt)}</span>
-        </Info>
+    <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-100">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lead Summary</h2>
+      <dl className="grid gap-x-10 gap-y-2.5 lg:grid-cols-2">
+        <div className="space-y-2.5">
+          <Info label="Lead Owner">{orMuted(lead.ownerName, 'Unassigned')}</Info>
+          <Info label="Lead Name">{orMuted(lead.name)}</Info>
+          <Info label="Lead Status"><span className={cx('font-medium', lead.stage === 'Converted' ? 'text-emerald-700' : isExitStage(lead.stage) ? 'text-rose-600' : 'text-blue-700')}>{lead.stage}</span></Info>
+          <Info label="Email">
+            {lead.email ? <button type="button" className="break-all text-left text-blue-600 hover:underline" onClick={onEmail}>{lead.email}</button> : <Muted>Not provided</Muted>}
+          </Info>
+          <Info label="Priority"><PriorityText value={lead.priority} /></Info>
+        </div>
+        <div className="space-y-2.5">
+          {lead.leadType !== 'Student' && <Info label="Phone"><PhoneLink value={lead.phone} onCall={() => onCall(lead.phone)} /></Info>}
+          <Info label="Mobile"><PhoneLink value={lead.mobile} onCall={() => onCall(lead.mobile)} /></Info>
+          <Info label="Last Contacted">{lead.lastContactedAt ? stamp(lead.lastContactedAt) : <Muted>No contact yet</Muted>}</Info>
+          <Info label="Next Follow-up">
+            {lead.nextFollowUpAt
+              ? <span className={cx(overdue && 'font-medium text-rose-600')}>{stamp(lead.nextFollowUpAt)}{overdue ? ' · Overdue' : ''}</span>
+              : <Muted>No follow-up scheduled</Muted>}
+          </Info>
+        </div>
       </dl>
-      <button type="button" className="mt-5 text-sm font-medium text-blue-600" onClick={() => setDetails(!details)}>
-        {details ? 'Hide Details' : 'Show Details'}
-      </button>
-      {details && (
-        <div className="mt-5 space-y-6 border-t border-slate-100 pt-5">
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-800">Lead Information</h3>
-            <dl className="grid gap-x-10 gap-y-3 lg:grid-cols-2">
-              {detailRows(lead).map(([label, value]) => <Info key={label} label={label}>{value === 0 ? 0 : value || '—'}</Info>)}
-            </dl>
+    </section>
+  );
+}
+
+const TASK_ICONS = { Call: '📞', 'Follow-up': '📞', Meeting: '👥', Demo: '🖥', 'Send Proposal': '📄', Email: '✉', WhatsApp: '💬' };
+
+function dueTime(task) {
+  if (task.dueAt) return new Date(task.dueAt).getTime();
+  return task.dueDate ? new Date(`${task.dueDate}T00:00`).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function NextActionCard({ tasks, user, onAdd, onViewAll, onChange, onError }) {
+  const [busy, setBusy] = useState(false);
+  const upcoming = [...tasks].sort((a, b) => dueTime(a) - dueTime(b));
+  const next = upcoming[0];
+  const awaiting = next && isAwaitingApproval(next);
+  const overdue = next && isOverdue(next);
+
+  async function complete() {
+    setBusy(true);
+    try {
+      await api(`/api/followups/${next.id}/status`, { method: 'PATCH', body: { status: 'Completed' } });
+      await onChange();
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className={cx('rounded-2xl bg-white p-5 ring-1', overdue ? 'ring-rose-200' : 'ring-slate-100')}>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next Action</h2>
+        <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onAdd}>+ Activity</button>
+      </div>
+      {next ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-lg">{TASK_ICONS[next.type] || '☑'}</span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800">{next.title}</p>
+            <p className={cx('text-sm', overdue ? 'font-medium text-rose-600' : 'text-slate-600')}>
+              {dueText(next)}{overdue ? ' · Overdue' : ''}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Assigned to {next.assigneeName || user?.name || 'Unassigned'}{next.type ? ` · ${next.type}` : ''}
+              {awaiting ? ' · Waiting for approval' : ''}
+            </p>
           </div>
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-800">Address Information</h3>
-            <dl className="space-y-3">
-              <Info label="Address">{address.length ? address.join(', ') : '—'}</Info>
-              {(lead.latitude || lead.longitude) && <Info label="Coordinates">{lead.latitude}, {lead.longitude}</Info>}
-            </dl>
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-800">Description Information</h3>
-            <dl><Info label="Description"><span className="whitespace-pre-wrap">{lead.notes || '—'}</span></Info></dl>
+          <div className="flex items-center gap-3">
+            {upcoming.length > 1 && (
+              <button type="button" className="text-sm text-blue-600 hover:underline" onClick={onViewAll}>View all {upcoming.length} open</button>
+            )}
+            <button type="button" className="btn !rounded-lg !py-1.5" disabled={busy || awaiting} onClick={complete} title={awaiting ? 'Head of Sales must approve this follow-up first' : ''}>
+              {busy && <Spinner />}Complete
+            </button>
           </div>
         </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">No follow-up scheduled</p>
+          <button type="button" className="btn !rounded-lg !py-1.5" onClick={onAdd}>+ Schedule Follow-up</button>
+        </div>
       )}
+    </section>
+  );
+}
+
+function infoGroups(lead) {
+  const type = lead.leadType;
+  const details = [
+    ['Lead Type', orMuted(type, 'Not set')],
+    ['Lead Source', orMuted(lead.source)],
+    ['Priority', <PriorityText value={lead.priority} />],
+  ];
+  if (type !== 'Student') details.push(['Rating', orMuted(lead.rating, 'Not rated')]);
+  details.push(['Created', stamp(lead.createdAt)]);
+  if (lead.closeReason) details.push([`${lead.stage} Reason`, lead.closeNote ? `${lead.closeReason} — ${lead.closeNote}` : lead.closeReason]);
+
+  const groups = [['Lead Details', details]];
+  if (type === 'Student') {
+    groups.push(['Education', [['College Name', orMuted(lead.collegeName)], ['Course', orMuted(lead.course)], ['Branch', orMuted(lead.branch)]]]);
+    groups.push(['Contact', [['First Name', orMuted(lead.firstName)], ['Last Name', orMuted(lead.lastName)]]]);
+  } else if (type === 'Industry') {
+    groups.push(['Organization', [
+      ['Company Name', orMuted(lead.company)], ['Website', orMuted(lead.website)], ['Fax', orMuted(lead.fax)],
+      ['No. of Employees', orMuted(lead.employees)], ['Annual Revenue', lead.annualRevenue != null ? money(lead.annualRevenue) : <Muted>Not provided</Muted>],
+    ]]);
+    groups.push(['Contact', [['Contact Person', orMuted(lead.contactPerson)]]]);
+  } else {
+    groups.push(['Organization', [[type === 'Institute' ? 'Institute Name' : 'Company', orMuted(lead.company)], ['Website', orMuted(lead.website)]]]);
+    groups.push(['Contact', [['Contact Person', orMuted(lead.contactPerson || (type === 'Institute' ? '' : lead.name))]]]);
+  }
+  return groups;
+}
+
+function PointsOfContact({ contacts }) {
+  const navigate = useNavigate();
+  return (
+    <ul className="grid gap-2 lg:grid-cols-2">
+      {contacts.map((c, index) => (
+        <li key={c.id}>
+          <button type="button" onClick={() => navigate(`/contacts/${c.id}`)} className="block h-full w-full rounded-xl bg-slate-50 px-4 py-3 text-left text-sm hover:bg-blue-50">
+            <span className="flex items-center gap-2">
+              <span className="truncate font-medium text-blue-700">{c.name}</span>
+              {index === 0 && contacts.length > 1 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Primary</span>}
+            </span>
+            <span className="block truncate text-xs text-slate-500">{c.title || 'No designation'}</span>
+            <span className="mt-1 block truncate text-xs text-slate-600">{[c.email, c.phone].filter(Boolean).join(' · ') || 'No email or phone'}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AddContactModal({ lead, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: '', title: '', email: '', phone: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setError(''); };
+
+  async function save(event) {
+    event.preventDefault();
+    if (busy) return;
+    if (!form.name.trim()) { setError('Name is required.'); return; }
+    if (form.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) { setError('Enter a valid email.'); return; }
+    setBusy(true);
+    try {
+      const contact = await api(`/api/leads/${lead.id}/contacts`, { method: 'POST', body: form });
+      await onSaved(contact);
+    } catch (err) {
+      setError(err.status ? err.message : 'Could not reach the server. Nothing was saved; try again.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Add Point of Contact" subtitle={lead.name} onClose={() => !busy && onClose()}>
+      <form className="space-y-4" onSubmit={save}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Name *"><input autoFocus className="field" placeholder="Full name" value={form.name} onChange={set('name')} /></Field>
+          <Field label="Designation"><input className="field" placeholder="e.g. Placement Officer" value={form.title} onChange={set('title')} /></Field>
+          <Field label="Email"><input className="field" type="email" value={form.email} onChange={set('email')} /></Field>
+          <Field label="Phone"><input className="field" value={form.phone} onChange={set('phone')} /></Field>
+        </div>
+        <p className="text-xs text-slate-500">Also saved in Contacts. An existing contact with the same email is linked instead of duplicated.</p>
+        {error && <Banner tone="danger">{error}</Banner>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn" disabled={busy}>{busy && <Spinner />}Add Contact</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function LeadInformation({ lead, contacts = [], onChange }) {
+  const [more, setMore] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const address = [lead.building, lead.street, lead.city, lead.state, lead.zip, lead.country].filter(Boolean);
+  return (
+    <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-100">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lead Information</h2>
+      <div className="space-y-4">
+        {infoGroups(lead).map(([title, rows]) => (
+          <div key={title}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-800">
+                {title === 'Contact' && contacts.length ? `Points of Contact (${contacts.length})` : title}
+              </h3>
+              {title === 'Contact' && (
+                <button type="button" className="text-sm font-medium text-blue-600 hover:underline" onClick={() => setAdding(true)}>+ Add Point of Contact</button>
+              )}
+            </div>
+            {title === 'Contact' && contacts.length ? <PointsOfContact contacts={contacts} /> : (
+              <dl className="grid gap-x-10 gap-y-2.5 lg:grid-cols-2">
+                {rows.map(([label, value]) => <Info key={label} label={label}>{value}</Info>)}
+              </dl>
+            )}
+          </div>
+        ))}
+        {more && (
+          <>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-800">Address</h3>
+              <dl className="space-y-2.5">
+                <Info label="Address">{address.length ? address.join(', ') : <Muted>Not provided</Muted>}</Info>
+                {(lead.latitude || lead.longitude) && <Info label="Coordinates">{lead.latitude}, {lead.longitude}</Info>}
+              </dl>
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-800">Description</h3>
+              <dl><Info label="Description"><span className="whitespace-pre-wrap">{orMuted(lead.notes, 'No description')}</span></Info></dl>
+            </div>
+          </>
+        )}
+      </div>
+      <button type="button" className="mt-4 text-sm font-medium text-blue-600" onClick={() => setMore(!more)}>
+        {more ? 'Hide address & description' : 'Show address & description'}
+      </button>
+      {adding && <AddContactModal lead={lead} onClose={() => setAdding(false)} onSaved={async () => { setAdding(false); await onChange(); }} />}
     </section>
   );
 }
@@ -448,7 +650,7 @@ export function Info({ label, children }) {
 }
 
 function PhoneLink({ value, onCall }) {
-  if (!value) return '—';
+  if (!value) return <Muted>Not provided</Muted>;
   return (
     <span className="inline-flex items-center gap-2">
       {value}
@@ -474,6 +676,7 @@ export function Empty({ children }) {
 }
 
 function NotesSection({ lead, notes, onChange }) {
+  const [adding, setAdding] = useState(false);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -484,6 +687,7 @@ function NotesSection({ lead, notes, onChange }) {
     try {
       await api('/api/notes', { method: 'POST', body: { body, linkedType: 'lead', linkedId: lead.id, linkedName: lead.name } });
       setBody('');
+      setAdding(false);
       await onChange();
     } finally {
       setBusy(false);
@@ -497,63 +701,32 @@ function NotesSection({ lead, notes, onChange }) {
   }
 
   return (
-    <Section id="notes" title="Notes">
-      <form onSubmit={add} className="flex gap-2">
-        <textarea className="field min-h-[44px] flex-1 !rounded-md" placeholder="Add a note…" value={body} onChange={(event) => setBody(event.target.value)} />
-        <button type="submit" className="btn !rounded-lg self-start" disabled={busy || !body.trim()}>Save</button>
-      </form>
-      <ul className="mt-3 divide-y divide-slate-100">
+    <Section
+      id="notes"
+      title="Notes"
+      action={!adding && <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setAdding(true)}>+ Add Note</button>}
+    >
+      {adding && (
+        <form onSubmit={add} className="mb-2 space-y-2">
+          <textarea autoFocus className="field min-h-[72px] !rounded-md" placeholder="Add a note…" value={body} onChange={(event) => setBody(event.target.value)} />
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => { setAdding(false); setBody(''); }}>Cancel</button>
+            <button type="submit" className="btn !rounded-lg !py-1.5" disabled={busy || !body.trim()}>Save</button>
+          </div>
+        </form>
+      )}
+      <ul className="divide-y divide-slate-100">
         {notes.map((note) => (
           <li key={note.id} className="flex items-start justify-between gap-3 py-3">
             <div>
               <p className="whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
-              <p className="mt-1 text-xs text-slate-400">{note.authorName} · {ago(note.createdAt)}</p>
+              <p className="mt-1 text-xs text-slate-400">{note.authorName} · {prettyDate(note.createdAt)}</p>
             </div>
             <button type="button" className="text-xs text-slate-400 hover:text-rose-600" onClick={() => remove(note.id)}>Delete</button>
           </li>
         ))}
       </ul>
-      {notes.length === 0 && <Empty>No notes yet.</Empty>}
-    </Section>
-  );
-}
-
-function ConnectedSection({ lead, contact, account, deal, onConvert }) {
-  const navigate = useNavigate();
-  const rows = [
-    account && { key: 'account', kind: 'Account', name: account.name, note: account.type || 'Organisation', to: `/accounts/${account.id}` },
-    contact && { key: 'contact', kind: 'Contact', name: contact.name, note: `${contact.company || 'No company'} · converted ${ago(lead.convertedAt)}`, to: `/contacts/${contact.id}` },
-    deal && { key: 'deal', kind: 'Deal', name: deal.name, note: `${deal.stage} · ${money(deal.value)}`, to: `/deals/${deal.id}` },
-  ].filter(Boolean);
-  return (
-    <Section id="connected" title="Connected Records">
-      {contact ? (
-        <div className="space-y-2">
-          {rows.map((row) => (
-            <div key={row.key} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-              <div>
-                <p className="font-medium">
-                  <span className="mr-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">{row.kind}</span>
-                  {row.name}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">{row.note}</p>
-              </div>
-              <button type="button" className="text-sm font-medium text-blue-600" onClick={() => navigate(row.to)}>Open</button>
-            </div>
-          ))}
-          {!deal && (
-            <div className="flex items-center justify-between">
-              <Empty>No deal was created for this lead.</Empty>
-              <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onConvert}>Create deal</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center justify-between">
-          <Empty>This lead hasn’t been converted yet.</Empty>
-          <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={onConvert}>Convert lead</button>
-        </div>
-      )}
+      {notes.length === 0 && !adding && <Empty>No notes yet.</Empty>}
     </Section>
   );
 }
@@ -648,10 +821,16 @@ export function callResult(call = {}) {
   return `Connected · ${call.customerResponse === 'Other' ? call.customerResponseOther : call.customerResponse}`;
 }
 
-function ActivitiesSection({ lead, open, closed, calls, members, user, onChange }) {
+function ActivitiesSection({ lead, open, closed, calls, members, user, onChange, formSignal = 0 }) {
   const blank = { title: '', dueDate: isoDay(new Date()), priority: 'Medium', assigneeId: user?.id || '', details: '' };
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!formSignal) return;
+    setForm((current) => current || blank);
+    setTimeout(() => document.getElementById('related-open')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  }, [formSignal]);
 
   async function add(event) {
     event.preventDefault();
@@ -793,10 +972,10 @@ const HISTORY_FILTERS = [
   ['tasks', 'Follow-ups', ['task']],
   ['emails', 'Emails', ['email']],
   ['files', 'Attachments', ['attachment']],
-  ['other', 'Other', ['created', 'converted']],
+  ['other', 'Other', ['created', 'converted', 'contact']],
 ];
 
-const ICONS = { call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
+const ICONS = { contact: '👥', call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
 
 export function dayKey(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -857,15 +1036,7 @@ export function CallEntry({ item, lead }) {
 
 function historyText(item, lead) {
   if (item.type === 'call') return <CallEntry item={item} lead={lead} />;
-  if (item.type === 'stage') {
-    const { from, to, extra } = splitChange(item.detail);
-    return (
-      <>
-        Lead Status was updated from <b>{from}</b> to <b>{to}</b>
-        {extra && <span className="block text-xs text-slate-500">Reason: {extra}</span>}
-      </>
-    );
-  }
+  if (item.type === 'stage') return <StageChangeEntry item={item} />;
   if (item.type === 'owner' || item.type === 'field') {
     const { from, to } = splitChange(item.detail);
     const label = item.type === 'owner' ? 'Lead Owner' : item.title.replace(/ was updated$/, '');
@@ -969,7 +1140,11 @@ function TimelineTab({ data, onChange }) {
                     <li key={item.id} className="grid grid-cols-[72px_32px_1fr] gap-3">
                       <span className="pt-1.5 text-right text-xs text-slate-500">{prettyTime(item.createdAt)}</span>
                       <div className="flex flex-col items-center">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm text-slate-500">{ICONS[item.type] || '•'}</span>
+                        {item.type === 'stage' ? (
+                          <span className={cx('grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm text-white shadow ring-4 ring-white', stageTone(stageEntry(item).to).dot)}>⇅</span>
+                        ) : (
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm text-slate-500">{ICONS[item.type] || '•'}</span>
+                        )}
                         {i < group.items.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
                       </div>
                       <div className="pb-6 pt-1 text-sm text-slate-700">
@@ -1080,24 +1255,119 @@ function SendEmailModal({ lead, onClose, onSent }) {
   );
 }
 
-function CloseModal({ stage, onClose, onSubmit }) {
+function StageChangeModal({ from, to, onClose, onSubmit }) {
+  const exit = isExitStage(to);
   const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
+  const [outcome, setOutcome] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    if (busy) return;
+    if (exit && !reason) { setError(`Pick a reason for marking this lead ${to}.`); return; }
+    if (!outcome.trim()) { setError('Describe the outcome before changing the status.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      await onSubmit({ outcome: outcome.trim(), closeReason: exit ? reason : '', closeNote: exit ? outcome.trim() : '' });
+    } catch (err) {
+      setError(err.status ? err.message : 'Could not reach the server. The status was not changed; try again.');
+      setBusy(false);
+    }
+  }
+
   return (
-    <Modal title={`Mark as ${stage}`} subtitle="Tell the team why." onClose={onClose}>
-      <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); onSubmit(reason, note); }}>
-        <Field label={`${stage} reason`}>
-          <select className="field" required value={reason} onChange={(event) => setReason(event.target.value)}>
-            <option value="">Choose a reason</option>
-            {closeReasons(stage).map((item) => <option key={item}>{item}</option>)}
-          </select>
+    <Modal title="Change Lead Status" subtitle="Confirm the change and record what happened." onClose={() => !busy && onClose()}>
+      <form className="space-y-4" onSubmit={submit}>
+        <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-50 p-4 text-sm ring-1 ring-slate-100">
+          <StageBadge stage={from} />
+          <span className="text-slate-400">→</span>
+          <StageBadge stage={to} />
+        </div>
+        {exit && (
+          <Field label={`${to} reason *`}>
+            <select className="field" value={reason} onChange={(event) => setReason(event.target.value)}>
+              <option value="">Choose a reason</option>
+              {closeReasons(to).map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </Field>
+        )}
+        <Field label="Outcome *" hint="Saved in the Timeline with the date and time of this change.">
+          <textarea
+            autoFocus
+            className="field min-h-24"
+            placeholder={exit ? 'Why is this lead being closed?' : `What happened that moves this lead to ${to}?`}
+            value={outcome}
+            onChange={(event) => { setOutcome(event.target.value); setError(''); }}
+          />
         </Field>
-        <Field label="What happened"><input className="field" value={note} onChange={(event) => setNote(event.target.value)} /></Field>
+        {error && <Banner tone="danger">{error}</Banner>}
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn">Save</button>
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn" disabled={busy}>{busy && <Spinner />}Confirm Change</button>
         </div>
       </form>
     </Modal>
+  );
+}
+
+function StageBadge({ stage }) {
+  const tone = stage === 'Converted' ? 'bg-emerald-100 text-emerald-700' : isExitStage(stage) ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-700';
+  return <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', tone)}>{stage || 'New'}</span>;
+}
+
+/** Status changes logged before outcomes were recorded only carry "From → To · reason — note" in their detail. */
+function stageEntry(item) {
+  const [path = '', ...rest] = (item.detail || '').split(' · ');
+  const [from, to] = path.split(' → ');
+  return {
+    from: item.fromStage || from || '',
+    to: item.toStage || to || item.title?.replace('Moved to ', '') || '',
+    outcome: item.outcome || rest.join(' · '),
+  };
+}
+
+const STAGE_SOURCES = [
+  ['Call · ', '📞 From a call'],
+  ['Converted · ', '⇄ Lead conversion'],
+  ['Changed from Edit Lead', '✎ Edit Lead'],
+];
+
+function stageTone(stage) {
+  if (stage === 'Converted') return { card: 'border-emerald-200 from-emerald-50', accent: 'border-emerald-400', dot: 'bg-emerald-500' };
+  if (isExitStage(stage)) return { card: 'border-rose-200 from-rose-50', accent: 'border-rose-400', dot: 'bg-rose-500' };
+  return { card: 'border-blue-200 from-blue-50', accent: 'border-blue-400', dot: 'bg-blue-600' };
+}
+
+function StageChangeEntry({ item }) {
+  const entry = stageEntry(item);
+  const source = STAGE_SOURCES.find(([prefix]) => entry.outcome.startsWith(prefix));
+  const outcome = source ? entry.outcome.slice(source[0].length).trim() : entry.outcome;
+  const tone = stageTone(entry.to);
+  return (
+    <span className={cx('block max-w-xl overflow-hidden rounded-2xl border bg-gradient-to-br to-white p-4 shadow-sm', tone.card)}>
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <b className="font-semibold text-slate-800">Lead Status Changed</b>
+        {source && <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">{source[1]}</span>}
+      </span>
+      <span className="mt-3 flex flex-wrap items-center gap-2">
+        {entry.from && (
+          <>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 line-through decoration-slate-300 ring-1 ring-slate-200">{entry.from}</span>
+            <span className="text-slate-400">➜</span>
+          </>
+        )}
+        <StageBadge stage={entry.to} />
+      </span>
+      {outcome ? (
+        <span className={cx('mt-3 block rounded-r-lg border-l-4 bg-white/80 px-3 py-2', tone.accent)}>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">Outcome</span>
+          <span className="mt-0.5 block whitespace-pre-wrap text-sm text-slate-700">{outcome}</span>
+        </span>
+      ) : (
+        <span className="mt-3 block text-xs text-slate-400">No outcome recorded</span>
+      )}
+    </span>
   );
 }

@@ -89,6 +89,8 @@ public class InsightController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
         mail.send(lead.getEmail(), request.subject(), request.body(), scope.user().getEmail());
         activities.log(lead, scope.user(), "email", "Email sent: " + request.subject(), request.body());
+        lead.setLastContactedAt(java.time.Instant.now());
+        leads.save(lead);
         return Map.of("sent", true, "to", lead.getEmail(), "subject", request.subject());
     }
 

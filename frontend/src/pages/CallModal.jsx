@@ -188,15 +188,12 @@ export default function CallModal({
         {phone && !dialable && <div className="mt-4"><Banner tone="warn">This phone number doesn&apos;t look valid. Edit the {record} to fix it before calling.</Banner></div>}
         {dialable ? (
           <>
-            <a href={`tel:${phone.replace(/[\s().-]/g, '')}`} onClick={startCall} className="btn mt-5 w-full justify-center !rounded-xl !py-3 text-base">
+            <button type="button" onClick={startCall} className="btn mt-5 w-full justify-center !rounded-xl !py-3 text-base">
               Start Call
-            </a>
-            <p className="mt-3 text-center text-xs text-slate-500">
-              This opens your phone or computer dialer. The CRM doesn&apos;t connect or record the call. Come back here to log what happened.
-            </p>
-            <button type="button" className="mt-2 w-full text-center text-sm text-blue-600 hover:underline" onClick={() => setStep('outcome')}>
-              Already called? Log the outcome
             </button>
+            <p className="mt-3 text-center text-xs text-slate-500">
+              Call {phone} from your phone, then log what happened on the next screen.
+            </p>
           </>
         ) : (
           <div className="mt-5 flex justify-end gap-2">
