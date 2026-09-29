@@ -55,6 +55,7 @@ public class Lead {
     private String notes;
     private List<String> tags = new ArrayList<>();
     private String convertedContactId;
+    private List<String> contactIds = new ArrayList<>();
     private String convertedAccountId;
     private String convertedDealId;
     private Instant convertedAt;

@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import LeadDetail from './pages/LeadDetail';
 import Pipeline from './pages/Pipeline';
+import Sales from './pages/Sales';
 import DealDetail from './pages/DealDetail';
 import AccountDetail from './pages/AccountDetail';
 import Contacts from './pages/Contacts';
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/leads" element={<Private><Leads /></Private>} />
       <Route path="/leads/:id" element={<Private><LeadDetail /></Private>} />
       <Route path="/pipeline" element={<Private><Pipeline /></Private>} />
+      <Route path="/sales" element={<Private><Sales /></Private>} />
       <Route path="/deals/:id" element={<Private><DealDetail /></Private>} />
       <Route path="/accounts/:id" element={<Private><AccountDetail /></Private>} />
       <Route path="/contacts" element={<Private><Contacts /></Private>} />

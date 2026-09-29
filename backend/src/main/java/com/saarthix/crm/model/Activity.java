@@ -27,4 +27,7 @@ public class Activity {
     private String actorName;
     private Instant createdAt;
     private CallLog call;
+    private String fromStage;
+    private String toStage;
+    private String outcome;
 }

@@ -9,15 +9,27 @@ function inDays(days) {
   return isoDay(date);
 }
 
-/** Lead → Account + Contact (+ Deal). A lead converted before deals existed only gets its deal here. */
-export default function ConvertLeadModal({ lead, contact, members, onClose, onConverted }) {
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** One card per person named on the lead; the lead's own email and phone go to the first (primary) person. */
+function initialPeople(lead) {
+  const email = lead.email || '';
+  const phone = lead.phone || lead.mobile || '';
+  if (lead.leadType === 'Student') return [{ name: lead.name || '', title: 'Student', email, phone }];
+  const names = (lead.contactPerson || '').split(/[,;\n/&|]|\s+and\s+/i).map((name) => name.trim()).filter(Boolean);
+  if (!names.length) return [{ name: '', title: '', email, phone }];
+  return names.map((name, index) => ({ name, title: '', email: index === 0 ? email : '', phone: index === 0 ? phone : '' }));
+}
+
+/** Lead → Account + Contacts (+ Deal). A lead converted before deals existed only gets its deal here. */
+export default function ConvertLeadModal({ lead, contact, contacts = [], members, onClose, onConverted }) {
   const dealOnly = Boolean(lead.convertedContactId);
   const defaultAccount = lead.company || lead.name;
-  const defaultContact = contact?.name || (lead.leadType !== 'Student' && lead.contactPerson) || lead.name;
+  const existing = contacts.length ? contacts : [contact].filter(Boolean);
   const [products, setProducts] = useState(['TalentX']);
+  const [people, setPeople] = useState(() => initialPeople(lead));
   const [form, setForm] = useState({
     accountName: defaultAccount,
-    contactName: defaultContact,
     createDeal: true,
     product: 'TalentX',
     dealName: '',
@@ -34,13 +46,19 @@ export default function ConvertLeadModal({ lead, contact, members, onClose, onCo
   }, []);
 
   const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  const setPerson = (index, key) => (event) => setPeople(people.map((p, i) => (i === index ? { ...p, [key]: event.target.value } : p)));
   const suggestedName = `${form.accountName.trim() || defaultAccount} - ${form.product.trim() || 'TalentX'}`;
 
   async function save(event) {
     event.preventDefault();
     if (busy) return;
     if (!form.accountName.trim()) { setError('Account name is required.'); return; }
-    if (!form.contactName.trim()) { setError('Contact name is required.'); return; }
+    if (!dealOnly) {
+      const unnamed = people.findIndex((p) => !p.name.trim());
+      if (unnamed >= 0) { setError(`Enter a name for contact ${unnamed + 1}, or remove it.`); return; }
+      const badEmail = people.find((p) => p.email.trim() && !EMAIL.test(p.email.trim()));
+      if (badEmail) { setError(`Enter a valid email for ${badEmail.name.trim()}.`); return; }
+    }
     if (form.createDeal) {
       if (form.value === '' || Number(form.value) < 0) { setError('Enter the deal value in rupees.'); return; }
       if (!form.expectedCloseDate) { setError('Choose the expected close date.'); return; }
@@ -52,7 +70,7 @@ export default function ConvertLeadModal({ lead, contact, members, onClose, onCo
         method: 'POST',
         body: {
           accountName: form.accountName,
-          contactName: form.contactName,
+          contacts: dealOnly ? [] : people.map((p) => ({ name: p.name.trim(), title: p.title.trim(), email: p.email.trim(), phone: p.phone.trim() })),
           createDeal: form.createDeal,
           deal: form.createDeal ? {
             name: form.dealName.trim() || suggestedName,
@@ -77,13 +95,53 @@ export default function ConvertLeadModal({ lead, contact, members, onClose, onCo
         <div className="mb-4"><Banner tone="warn">This lead is still {lead.stage}. Leads are usually converted once they are Qualified.</Banner></div>
       )}
       <form onSubmit={save} className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Account *" hint="Linked to an existing account with the same name, if there is one.">
-            <input className="field" value={form.accountName} onChange={set('accountName')} />
-          </Field>
-          <Field label="Contact *" hint={dealOnly ? 'Already created when this lead was converted.' : 'Reuses an existing contact with the same email.'}>
-            <input className="field" value={form.contactName} onChange={set('contactName')} disabled={dealOnly} />
-          </Field>
+        <Field label="Account *" hint="Linked to an existing account with the same name, if there is one.">
+          <input className="field" value={form.accountName} onChange={set('accountName')} />
+        </Field>
+
+        <div className="rounded-2xl border border-slate-200 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Points of Contact</h3>
+              <p className="text-xs text-slate-500">
+                {dealOnly ? 'Already created when this lead was converted.' : 'Each person becomes a contact under the account. An existing contact with the same email is reused.'}
+              </p>
+            </div>
+            {!dealOnly && (
+              <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setPeople([...people, { name: '', title: '', email: '', phone: '' }])}>
+                + Add Contact
+              </button>
+            )}
+          </div>
+          {dealOnly ? (
+            <ul className="space-y-1 text-sm text-slate-700">
+              {existing.map((c) => <li key={c.id}>{c.name}{c.title ? <span className="text-slate-500"> · {c.title}</span> : null}</li>)}
+            </ul>
+          ) : (
+            <div className="space-y-3">
+              {existing.length > 0 && (
+                <p className="rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  Already added to this lead, and linked to the account too: {existing.map((c) => c.name).join(', ')}
+                </p>
+              )}
+              {people.map((person, index) => (
+                <div key={index} className="rounded-xl bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-600">{index === 0 ? 'Primary contact' : `Contact ${index + 1}`}</span>
+                    {people.length > 1 && (
+                      <button type="button" className="text-slate-400 hover:text-rose-600" onClick={() => setPeople(people.filter((_, i) => i !== index))}>Remove</button>
+                    )}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Name *"><input className="field" placeholder="Full name" value={person.name} onChange={setPerson(index, 'name')} /></Field>
+                    <Field label="Designation"><input className="field" placeholder="e.g. Placement Officer" value={person.title} onChange={setPerson(index, 'title')} /></Field>
+                    <Field label="Email"><input className="field" type="email" value={person.email} onChange={setPerson(index, 'email')} /></Field>
+                    <Field label="Phone"><input className="field" value={person.phone} onChange={setPerson(index, 'phone')} /></Field>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 p-4">
