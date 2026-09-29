@@ -11,6 +11,7 @@ const NAV = [
   { to: '/pipeline', label: 'Pipeline' },
   { to: '/contacts', label: 'Contacts' },
   { to: '/follow-ups', label: 'Follow-ups' },
+  { to: '/notes', label: 'Notes' },
 ];
 
 function Icon({ name }) {
@@ -27,11 +28,12 @@ function Icon({ name }) {
 }
 
 const RAIL = [
-  { to: '/dashboard', icon: 'dash' },
-  { to: '/leads', icon: 'leads' },
-  { to: '/pipeline', icon: 'pipe' },
-  { to: '/contacts', icon: 'people' },
-  { to: '/follow-ups', icon: 'task' },
+  { to: '/dashboard', icon: 'dash', label: 'Dashboard' },
+  { to: '/leads', icon: 'leads', label: 'Leads' },
+  { to: '/pipeline', icon: 'pipe', label: 'Pipeline' },
+  { to: '/contacts', icon: 'people', label: 'Contacts' },
+  { to: '/follow-ups', icon: 'task', label: 'Follow-ups' },
+  { to: '/notes', icon: 'note', label: 'Notes' },
 ];
 
 export default function Shell({ children }) {
@@ -95,6 +97,8 @@ export default function Shell({ children }) {
             <NavLink
               key={item.to}
               to={item.to}
+              title={item.label}
+              aria-label={item.label}
               className={({ isActive }) => cx(
                 'grid h-11 w-11 place-items-center rounded-2xl text-slate-400 transition',
                 isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'hover:bg-slate-100 hover:text-slate-700',
