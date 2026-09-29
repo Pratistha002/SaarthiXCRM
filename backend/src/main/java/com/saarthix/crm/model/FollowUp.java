@@ -6,6 +6,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Document(collection = "followups")
@@ -40,4 +42,13 @@ public class FollowUp {
     private String approvedById;
     private String approvedByName;
     private Instant approvedAt;
+    private String location;
+    private String meetingLink;
+    private String contactPerson;
+    private String purpose;
+    private Integer durationMinutes;
+    private Instant endAt;
+    private List<String> attendeeIds = new ArrayList<>();
+    private String attendees;
+    private String meetingLogId;
 }

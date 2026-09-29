@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useTeam } from '../useTeam';
@@ -497,7 +497,7 @@ function NotesSection({ lead, notes, onChange }) {
   }
 
   return (
-    <Section id="notes" title="Notes">
+    <Section id="notes" title="Notes" action={<Link className="text-sm font-medium text-blue-700" to={`/notes?lead=${lead.id}`}>View all notes</Link>}>
       <form onSubmit={add} className="flex gap-2">
         <textarea className="field min-h-[44px] flex-1 !rounded-md" placeholder="Add a note…" value={body} onChange={(event) => setBody(event.target.value)} />
         <button type="submit" className="btn !rounded-lg self-start" disabled={busy || !body.trim()}>Save</button>
@@ -791,12 +791,13 @@ const HISTORY_FILTERS = [
   ['fields', 'Field updates', ['field', 'owner']],
   ['notes', 'Notes', ['note']],
   ['tasks', 'Follow-ups', ['task']],
+  ['meetings', 'Meetings', ['meeting']],
   ['emails', 'Emails', ['email']],
   ['files', 'Attachments', ['attachment']],
   ['other', 'Other', ['created', 'converted']],
 ];
 
-const ICONS = { call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
+const ICONS = { call: '📞', stage: '✎', field: '✎', owner: '👤', note: '🗒', task: '☑', meeting: '📅', email: '✉', attachment: '📎', created: '✚', converted: '⇄' };
 
 export function dayKey(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });

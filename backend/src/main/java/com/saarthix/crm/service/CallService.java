@@ -34,6 +34,7 @@ public class CallService {
             "Follow-up", "Follow up",
             "Meeting", "Meeting",
             "Demo", "Product demo",
+            "Visit", "College visit",
             "Send Proposal", "Send proposal",
             "Email", "Send email",
             "WhatsApp", "WhatsApp message");
@@ -93,7 +94,8 @@ public class CallService {
                     request.dueDate(),
                     lead.getPriority() != null && Catalog.PRIORITIES.contains(lead.getPriority()) ? lead.getPriority() : "Medium",
                     "Pending", lead.getId(), scope.id(), null,
-                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, null));
+                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, null,
+                    null, null, null, null, null, null, null));
             call.setFollowUpId(task.getId());
             activity = activities.save(activity);
         }
@@ -132,7 +134,8 @@ public class CallService {
                     request.dueDate(),
                     deal.getPriority() != null && Catalog.PRIORITIES.contains(deal.getPriority()) ? deal.getPriority() : "Medium",
                     "Pending", null, scope.id(), null,
-                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, deal.getId()));
+                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, deal.getId(),
+                    null, null, null, null, null, null, null));
             call.setFollowUpId(task.getId());
             activity = activities.save(activity);
         }

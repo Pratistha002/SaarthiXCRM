@@ -75,7 +75,32 @@ public final class Catalog {
             "Call Back Later", "Other");
     public static final String NO_FURTHER_ACTION = "No Further Action";
     public static final List<String> TASK_TYPES = List.of(
-            "Call", "Follow-up", "Meeting", "Demo", "Send Proposal", "Email", "WhatsApp");
+            "Call", "Follow-up", "Meeting", "Demo", "Visit", "Send Proposal", "Email", "WhatsApp");
+    public static final List<String> TIMED_EVENT_TYPES = List.of("Call", "Meeting", "Demo", "Visit");
+    public static final List<String> MEETING_LOG_TYPES = List.of("Meeting", "Demo", "Visit");
+    public static final List<String> INTEREST_LEVELS = List.of(
+            "Hot", "Warm", "Neutral", "Cold", "Not Interested");
+    public static final List<String> VISIT_PURPOSES = List.of(
+            "Campus visit", "Placement meeting", "Product demo", "Contract discussion",
+            "Relationship building", "Other");
+
+    public static int defaultDuration(String type) {
+        if (type == null) return 0;
+        return switch (type) {
+            case "Call" -> 15;
+            case "Meeting", "Demo" -> 60;
+            case "Visit" -> 90;
+            default -> 0;
+        };
+    }
+
+    public static boolean isTimedEvent(String type) {
+        return type != null && TIMED_EVENT_TYPES.contains(type);
+    }
+
+    public static boolean canLogMeeting(String type) {
+        return type != null && MEETING_LOG_TYPES.contains(type);
+    }
     public static final Map<String, Integer> REMINDER_MINUTES = Map.of(
             "None", 0,
             "15 minutes before", 15,

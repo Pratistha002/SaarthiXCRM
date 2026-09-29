@@ -32,14 +32,18 @@ public class NoteService {
         this.scope = scope;
     }
 
-    public Map<String, Object> list(String q, String filter) {
+    public Map<String, Object> list(String q, String filter, String leadId) {
         List<Note> all = visibleNotes();
         String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
         String mode = filter == null ? "All" : filter;
+        String lead = leadId == null ? "" : leadId.trim();
         List<Note> filtered = all.stream()
                 .filter(n -> query.isEmpty()
                         || contains(n.getBody(), query)
-                        || contains(n.getLinkedName(), query))
+                        || contains(n.getLinkedName(), query)
+                        || contains(n.getAuthorName(), query))
+                .filter(n -> lead.isEmpty()
+                        || ("lead".equals(n.getLinkedType()) && lead.equals(n.getLinkedId())))
                 .filter(n -> switch (mode) {
                     case "Pinned" -> n.isPinned();
                     case "Linked" -> n.getLinkedId() != null && !n.getLinkedId().isBlank();

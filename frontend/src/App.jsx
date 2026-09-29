@@ -15,6 +15,8 @@ import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import Notes from './pages/Notes';
 import FollowUps from './pages/FollowUps';
+import Calendar from './pages/Calendar';
+import MeetingLogs from './pages/MeetingLogs';
 import Team from './pages/Team';
 
 function Private({ children }) {
@@ -40,6 +42,8 @@ export default function App() {
       <Route path="/contacts/:id" element={<Private><ContactDetail /></Private>} />
       <Route path="/notes" element={<Private><Notes /></Private>} />
       <Route path="/follow-ups" element={<Private><FollowUps /></Private>} />
+      <Route path="/calendar" element={<Private><Calendar /></Private>} />
+      <Route path="/meeting-logs" element={<Private><MeetingLogs /></Private>} />
       <Route path="/team" element={<Private><Team /></Private>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

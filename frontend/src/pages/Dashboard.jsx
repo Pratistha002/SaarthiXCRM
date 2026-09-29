@@ -285,7 +285,7 @@ export default function Dashboard() {
                 <p className="py-2 text-sm text-slate-400">No upcoming follow-ups yet.</p>
               )}
               {(view.upcoming || []).map((task) => (
-                <button key={task.id} type="button" onClick={() => navigate(task.kind === 'Call' ? '/follow-ups?kind=call' : '/follow-ups?kind=manual')} className="flex w-full items-start gap-2 text-left">
+                <button key={task.id} type="button" onClick={() => navigate(`/calendar?event=${task.id}`)} className="flex w-full items-start gap-2 text-left">
                   <span className={cx('mt-0.5 text-sm', isOverdue(task) ? 'text-rose-500' : 'text-amber-500')}>△</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-slate-800">{task.title}</span>
