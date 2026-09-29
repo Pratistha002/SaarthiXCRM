@@ -10,6 +10,8 @@ public interface FollowUpRepository extends MongoRepository<FollowUp, String> {
     List<FollowUp> findByRemindAtLessThanEqualAndReminderSentAtIsNullAndStatusNot(Instant at, String status);
     List<FollowUp> findByWorkspaceId(String workspaceId);
     List<FollowUp> findByWorkspaceIdAndLeadId(String workspaceId, String leadId);
+    List<FollowUp> findByWorkspaceIdAndDealId(String workspaceId, String dealId);
+    List<FollowUp> findByWorkspaceIdAndDealIdNotNullAndStatusNot(String workspaceId, String status);
     List<FollowUp> findByOwnerId(String ownerId);
     List<FollowUp> findByStatusNot(String status);
 }

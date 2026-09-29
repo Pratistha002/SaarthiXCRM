@@ -17,6 +17,8 @@ public class Attachment {
     private String workspaceId;
     @Indexed
     private String leadId;
+    @Indexed
+    private String dealId;
     private String fileName;
     private String contentType;
     private long size;

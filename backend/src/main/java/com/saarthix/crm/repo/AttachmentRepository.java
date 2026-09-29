@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface AttachmentRepository extends MongoRepository<Attachment, String> {
     List<Attachment> findByLeadIdOrderByCreatedAtDesc(String leadId);
+    List<Attachment> findByDealIdOrderByCreatedAtDesc(String dealId);
     void deleteByLeadId(String leadId);
 }

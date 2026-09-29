@@ -2,6 +2,7 @@ package com.saarthix.crm.service;
 
 import com.saarthix.crm.model.Activity;
 import com.saarthix.crm.model.CallLog;
+import com.saarthix.crm.model.Deal;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.User;
 import com.saarthix.crm.repo.ActivityRepository;
@@ -27,6 +28,40 @@ public class ActivityService {
         Activity activity = build(lead, actor, "call", title, detail);
         activity.setCall(call);
         return activities.save(activity);
+    }
+
+    public Activity logDeal(Deal deal, User actor, String type, String title, String detail) {
+        return activities.save(buildDeal(deal, actor, type, title, detail));
+    }
+
+    public Activity logDealCall(Deal deal, User actor, String title, String detail, CallLog call) {
+        Activity activity = buildDeal(deal, actor, "call", title, detail);
+        activity.setCall(call);
+        return activities.save(activity);
+    }
+
+    public List<Activity> forDeal(String dealId) {
+        return activities.findByDealIdOrderByCreatedAtDesc(dealId);
+    }
+
+    public Optional<Activity> findDealCall(String dealId, String requestId) {
+        if (requestId == null || requestId.isBlank()) return Optional.empty();
+        return activities.findFirstByDealIdAndCallRequestId(dealId, requestId);
+    }
+
+    private Activity buildDeal(Deal deal, User actor, String type, String title, String detail) {
+        Activity activity = new Activity();
+        activity.setWorkspaceId(deal.getWorkspaceId());
+        activity.setDealId(deal.getId());
+        activity.setAccountId(deal.getAccountId());
+        activity.setContactId(deal.getPrimaryContactId());
+        activity.setType(type);
+        activity.setTitle(title);
+        activity.setDetail(detail == null ? "" : detail);
+        activity.setActorId(actor == null ? "" : actor.getId());
+        activity.setActorName(actor == null ? "SaarthiX" : actor.getName());
+        activity.setCreatedAt(Instant.now());
+        return activity;
     }
 
     public Activity save(Activity activity) {

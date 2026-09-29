@@ -3,8 +3,11 @@ package com.saarthix.crm.service;
 import com.saarthix.crm.domain.Catalog;
 import com.saarthix.crm.model.Activity;
 import com.saarthix.crm.model.CallLog;
+import com.saarthix.crm.model.Contact;
+import com.saarthix.crm.model.Deal;
 import com.saarthix.crm.model.FollowUp;
 import com.saarthix.crm.model.Lead;
+import com.saarthix.crm.repo.ContactRepository;
 import com.saarthix.crm.repo.LeadRepository;
 import com.saarthix.crm.security.Scope;
 import org.springframework.http.HttpStatus;
@@ -37,14 +40,18 @@ public class CallService {
 
     private final LeadRepository leads;
     private final LeadService leadService;
+    private final DealService dealService;
+    private final ContactRepository contacts;
     private final FollowUpService followUps;
     private final ActivityService activities;
     private final Scope scope;
 
-    public CallService(LeadRepository leads, LeadService leadService, FollowUpService followUps,
-                       ActivityService activities, Scope scope) {
+    public CallService(LeadRepository leads, LeadService leadService, DealService dealService, ContactRepository contacts,
+                       FollowUpService followUps, ActivityService activities, Scope scope) {
         this.leads = leads;
         this.leadService = leadService;
+        this.dealService = dealService;
+        this.contacts = contacts;
         this.followUps = followUps;
         this.activities = activities;
         this.scope = scope;
@@ -56,7 +63,84 @@ public class CallService {
         Activity existing = activities.findCall(lead.getId(), request.requestId()).orElse(null);
         if (existing != null) return result(existing, lead.getId(), true);
 
-        String phone = dialablePhone(lead, request.phone());
+        String phone = dialablePhone(lead.getPhone(), lead.getMobile(), request.phone(), "lead");
+        CallLog call = buildCall(request, phone);
+        String reminder = blank(request.reminder()) ? "None" : request.reminder();
+        boolean schedule = call.getNextActionAt() != null;
+
+        String stageBefore = lead.getStage();
+        String stageAfter = blank(request.stage()) ? stageBefore : request.stage();
+        boolean stageChanged = !stageAfter.equals(stageBefore);
+        if (stageChanged) {
+            Catalog.require(stageAfter, Catalog.STAGES, "Lead status");
+            if (Catalog.isWon(stageAfter)) throw bad("Use the Convert button to convert this lead.");
+            if (Catalog.isExit(stageAfter)) {
+                if (blank(request.closeReason())) throw bad("Pick a reason for marking this lead " + stageAfter + ".");
+                Catalog.require(request.closeReason(), Catalog.reasonsFor(stageAfter), stageAfter + " reason");
+            }
+        }
+
+        Instant now = call.getCompletedAt();
+        call.setStageBefore(stageBefore);
+        call.setStageAfter(stageAfter);
+
+        Activity activity = activities.logCall(lead, scope.user(), title(call), summary(call), call);
+
+        if (schedule) {
+            FollowUp task = followUps.createForLead(lead.getId(), new FollowUpService.TaskRequest(
+                    TASK_TITLES.get(call.getNextAction()) + " · " + lead.getName(),
+                    call.getNotes().isBlank() ? "From call: " + outcomeText(call) : call.getNotes(),
+                    request.dueDate(),
+                    lead.getPriority() != null && Catalog.PRIORITIES.contains(lead.getPriority()) ? lead.getPriority() : "Medium",
+                    "Pending", lead.getId(), scope.id(), null,
+                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, null));
+            call.setFollowUpId(task.getId());
+            activity = activities.save(activity);
+        }
+
+        if (stageChanged) {
+            leadService.move(lead.getId(), new LeadService.StageRequest(stageAfter,
+                    Catalog.isExit(stageAfter) ? request.closeReason() : null,
+                    Catalog.isExit(stageAfter) ? request.closeNote() : null));
+        }
+
+        Lead fresh = owned(lead.getId());
+        fresh.setLastContactedAt(now);
+        fresh.setUpdatedAt(now);
+        leads.save(fresh);
+
+        return result(activity, lead.getId(), false);
+    }
+
+    /** Logs a call to the deal's primary contact. Deal stages move only from the pipeline, never from a call. */
+    public Map<String, Object> logForDeal(String dealId, CallRequest request) {
+        Deal deal = dealService.owned(dealId);
+        Activity existing = activities.findDealCall(deal.getId(), request.requestId()).orElse(null);
+        if (existing != null) return dealResult(existing, deal.getId(), true);
+
+        Contact contact = blank(deal.getPrimaryContactId()) ? null : contacts.findById(deal.getPrimaryContactId()).orElse(null);
+        if (contact == null) throw bad("This deal has no primary contact. Edit the deal to pick one.");
+        String phone = dialablePhone(contact.getPhone(), null, request.phone(), "contact");
+        CallLog call = buildCall(request, phone);
+        String reminder = blank(request.reminder()) ? "None" : request.reminder();
+
+        Activity activity = activities.logDealCall(deal, scope.user(), title(call), summary(call), call);
+        if (call.getNextActionAt() != null) {
+            FollowUp task = followUps.createForDeal(deal.getId(), new FollowUpService.TaskRequest(
+                    TASK_TITLES.get(call.getNextAction()) + " · " + deal.getAccountName(),
+                    call.getNotes().isBlank() ? "From call: " + outcomeText(call) : call.getNotes(),
+                    request.dueDate(),
+                    deal.getPriority() != null && Catalog.PRIORITIES.contains(deal.getPriority()) ? deal.getPriority() : "Medium",
+                    "Pending", null, scope.id(), null,
+                    call.getNextAction(), request.dueTime(), call.getNextActionAt().toString(), reminder, deal.getId()));
+            call.setFollowUpId(task.getId());
+            activity = activities.save(activity);
+        }
+        return dealResult(activity, deal.getId(), false);
+    }
+
+    /** Validates everything the salesperson reported about the call before anything is written. */
+    private CallLog buildCall(CallRequest request, String phone) {
         String outcome = request.outcome();
         if (blank(outcome)) throw bad("Please select a call outcome.");
         Catalog.require(outcome, Catalog.CALL_OUTCOMES, "Call outcome");
@@ -81,18 +165,6 @@ public class CallService {
         String reminder = blank(request.reminder()) ? "None" : request.reminder();
         if (schedule && !Catalog.REMINDER_MINUTES.containsKey(reminder)) throw bad("Pick a valid reminder.");
 
-        String stageBefore = lead.getStage();
-        String stageAfter = blank(request.stage()) ? stageBefore : request.stage();
-        boolean stageChanged = !stageAfter.equals(stageBefore);
-        if (stageChanged) {
-            Catalog.require(stageAfter, Catalog.STAGES, "Lead status");
-            if (Catalog.isWon(stageAfter)) throw bad("Use the Convert button to convert this lead.");
-            if (Catalog.isExit(stageAfter)) {
-                if (blank(request.closeReason())) throw bad("Pick a reason for marking this lead " + stageAfter + ".");
-                Catalog.require(request.closeReason(), Catalog.reasonsFor(stageAfter), stageAfter + " reason");
-            }
-        }
-
         Instant now = Instant.now();
         CallLog call = new CallLog();
         call.setRequestId(blank(request.requestId()) ? null : request.requestId());
@@ -110,36 +182,19 @@ public class CallService {
             call.setNextActionTime(request.dueTime());
             call.setNextActionAt(dueAt);
         }
-        call.setStageBefore(stageBefore);
-        call.setStageAfter(stageAfter);
+        return call;
+    }
 
-        Activity activity = activities.logCall(lead, scope.user(),
-                connected ? "Call completed" : "Call attempted · " + outcome, summary(call), call);
+    private String title(CallLog call) {
+        return Catalog.CONNECTED.equals(call.getOutcome()) ? "Call completed" : "Call attempted · " + call.getOutcome();
+    }
 
-        if (schedule) {
-            FollowUp task = followUps.createForLead(lead.getId(), new FollowUpService.TaskRequest(
-                    TASK_TITLES.get(nextAction) + " · " + lead.getName(),
-                    call.getNotes().isBlank() ? "From call: " + outcomeText(call) : call.getNotes(),
-                    request.dueDate(),
-                    Catalog.PRIORITIES.contains(lead.getPriority()) ? lead.getPriority() : "Medium",
-                    "Pending", lead.getId(), scope.id(), null,
-                    nextAction, request.dueTime(), dueAt.toString(), reminder));
-            call.setFollowUpId(task.getId());
-            activity = activities.save(activity);
-        }
-
-        if (stageChanged) {
-            leadService.move(lead.getId(), new LeadService.StageRequest(stageAfter,
-                    Catalog.isExit(stageAfter) ? request.closeReason() : null,
-                    Catalog.isExit(stageAfter) ? request.closeNote() : null));
-        }
-
-        Lead fresh = owned(lead.getId());
-        fresh.setLastContactedAt(now);
-        fresh.setUpdatedAt(now);
-        leads.save(fresh);
-
-        return result(activity, lead.getId(), false);
+    private Map<String, Object> dealResult(Activity activity, String dealId, boolean duplicate) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("activity", activity);
+        body.put("deal", dealService.get(dealId));
+        body.put("duplicate", duplicate);
+        return body;
     }
 
     private Instant validateSchedule(CallRequest request) {
@@ -159,15 +214,15 @@ public class CallService {
         return dueAt;
     }
 
-    /** Uses the number the salesperson picked only if it belongs to this lead; otherwise phone, then mobile. */
-    private String dialablePhone(Lead lead, String chosen) {
-        String raw = !blank(lead.getPhone()) ? lead.getPhone() : lead.getMobile();
-        if (!blank(chosen) && (digits(chosen).equals(digits(lead.getPhone())) || digits(chosen).equals(digits(lead.getMobile())))) {
+    /** Uses the number the salesperson picked only if it is one of the record's numbers; otherwise phone, then mobile. */
+    private String dialablePhone(String primary, String secondary, String chosen, String record) {
+        String raw = !blank(primary) ? primary : secondary;
+        if (!blank(chosen) && (digits(chosen).equals(digits(primary)) || digits(chosen).equals(digits(secondary)))) {
             raw = chosen;
         }
-        if (blank(raw)) throw bad("No phone number is available for this lead.");
+        if (blank(raw)) throw bad("No phone number is available for this " + record + ".");
         if (!PHONE.matcher(digits(raw)).matches()) {
-            throw bad("The phone number on this lead doesn't look valid. Edit the lead to fix it.");
+            throw bad("The phone number on this " + record + " doesn't look valid. Edit the " + record + " to fix it.");
         }
         return raw.trim();
     }

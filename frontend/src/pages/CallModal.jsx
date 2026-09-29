@@ -58,7 +58,14 @@ function Chips({ options, value, onChange, tone = 'blue' }) {
   );
 }
 
-export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEditLead }) {
+/**
+ * Lead calls also suggest a lead status. Deal calls pass `endpoint` and `showStatus={false}`: a deal's stage only moves
+ * on the pipeline, never as a side effect of a call.
+ */
+export default function CallModal({
+  lead, phone: chosen, onClose, onSaved, onEditLead,
+  endpoint = `/api/leads/${lead.id}/activities/call`, showStatus = true, editLabel = 'Edit lead', record = 'lead',
+}) {
   const phone = (chosen || primaryPhone(lead)).trim();
   const dialable = isDialable(phone);
   const requestId = useMemo(newRequestId, []);
@@ -123,7 +130,7 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
         return 'The next action is in the past. Pick a future date and time.';
       }
     }
-    if (isExitStage(form.stage) && form.stage !== lead.stage && !form.closeReason) {
+    if (showStatus && isExitStage(form.stage) && form.stage !== lead.stage && !form.closeReason) {
       return `Pick a reason for marking this lead ${form.stage}.`;
     }
     return '';
@@ -140,7 +147,7 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
     setBusy(true);
     setError('');
     try {
-      const result = await api(`/api/leads/${lead.id}/activities/call`, {
+      const result = await api(endpoint, {
         method: 'POST',
         body: {
           requestId,
@@ -155,8 +162,8 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
           dueTime: scheduling ? form.dueTime : null,
           dueAt: scheduling ? new Date(`${form.dueDate}T${form.dueTime}`).toISOString() : null,
           reminder: scheduling ? form.reminder : 'None',
-          stage: form.stage,
-          closeReason: isExitStage(form.stage) ? form.closeReason : '',
+          stage: showStatus ? form.stage : null,
+          closeReason: showStatus && isExitStage(form.stage) ? form.closeReason : '',
         },
       });
       await onSaved(result);
@@ -177,8 +184,8 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
           {lead.company && lead.company !== lead.name && <p className="text-sm text-slate-500">{lead.company}</p>}
           <p className="mt-3 text-xl font-medium tracking-wide text-slate-800">📞 {phone || '—'}</p>
         </div>
-        {!phone && <div className="mt-4"><Banner tone="warn">No phone number is available for this lead.</Banner></div>}
-        {phone && !dialable && <div className="mt-4"><Banner tone="warn">This phone number doesn&apos;t look valid. Edit the lead to fix it before calling.</Banner></div>}
+        {!phone && <div className="mt-4"><Banner tone="warn">No phone number is available for this {record}.</Banner></div>}
+        {phone && !dialable && <div className="mt-4"><Banner tone="warn">This phone number doesn&apos;t look valid. Edit the {record} to fix it before calling.</Banner></div>}
         {dialable ? (
           <>
             <a href={`tel:${phone.replace(/[\s().-]/g, '')}`} onClick={startCall} className="btn mt-5 w-full justify-center !rounded-xl !py-3 text-base">
@@ -194,7 +201,7 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
         ) : (
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-            <button type="button" className="btn" onClick={onEditLead}>Edit lead</button>
+            <button type="button" className="btn" onClick={onEditLead}>{editLabel}</button>
           </div>
         )}
       </Modal>
@@ -238,6 +245,7 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
           )}
         </div>
 
+        {showStatus && (
         <div className="grid gap-3 sm:grid-cols-2">
           <Field
             label="Lead Status"
@@ -257,6 +265,7 @@ export default function CallModal({ lead, phone: chosen, onClose, onSaved, onEdi
             </Field>
           )}
         </div>
+        )}
 
         {error && <Banner tone="danger">{error}</Banner>}
 

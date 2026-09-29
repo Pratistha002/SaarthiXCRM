@@ -2,6 +2,7 @@ package com.saarthix.crm.web;
 
 import com.saarthix.crm.model.AppNotification;
 import com.saarthix.crm.model.Contact;
+import com.saarthix.crm.model.Deal;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.Note;
 import com.saarthix.crm.repo.ContactRepository;
@@ -11,6 +12,7 @@ import com.saarthix.crm.repo.NotificationRepository;
 import com.saarthix.crm.security.Scope;
 import com.saarthix.crm.service.ActivityService;
 import com.saarthix.crm.service.DashboardService;
+import com.saarthix.crm.service.DealService;
 import com.saarthix.crm.service.MailService;
 import com.saarthix.crm.service.ReminderService;
 import jakarta.validation.Valid;
@@ -39,11 +41,13 @@ public class InsightController {
     private final LeadRepository leads;
     private final ContactRepository contacts;
     private final NoteRepository notes;
+    private final DealService deals;
     private final Scope scope;
 
     public InsightController(DashboardService dashboard, MailService mail, ActivityService activities,
                              ReminderService reminders, NotificationRepository notifications, LeadRepository leads,
-                             ContactRepository contacts, NoteRepository notes, Scope scope) {
+                             ContactRepository contacts, NoteRepository notes, DealService deals, Scope scope) {
+        this.deals = deals;
         this.dashboard = dashboard;
         this.mail = mail;
         this.activities = activities;
@@ -67,6 +71,19 @@ public class InsightController {
 
     @PostMapping("/api/mail/send")
     public Map<String, Object> send(@Valid @RequestBody SendRequest request) {
+        if (request.dealId() != null && !request.dealId().isBlank()) {
+            Deal deal = deals.owned(request.dealId());
+            Contact contact = deal.getPrimaryContactId() == null ? null : contacts.findById(deal.getPrimaryContactId()).orElse(null);
+            if (contact == null || contact.getEmail() == null || contact.getEmail().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The deal's primary contact has no email address");
+            }
+            mail.send(contact.getEmail(), request.subject(), request.body(), scope.user().getEmail());
+            activities.logDeal(deal, scope.user(), "email", "Email sent: " + request.subject(), request.body());
+            return Map.of("sent", true, "to", contact.getEmail(), "subject", request.subject());
+        }
+        if (request.leadId() == null || request.leadId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who to email");
+        }
         Lead lead = leads.findById(request.leadId())
                 .filter(item -> scope.sameWorkspace(item.getWorkspaceId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
@@ -131,7 +148,8 @@ public class InsightController {
     }
 
     public record SendRequest(
-            @NotBlank String leadId,
+            String leadId,
+            String dealId,
             @NotBlank(message = "Subject is required") String subject,
             @NotBlank(message = "Write the email before sending") String body) {
     }

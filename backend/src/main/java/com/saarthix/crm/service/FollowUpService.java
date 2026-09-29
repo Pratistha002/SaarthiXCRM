@@ -1,9 +1,11 @@
 package com.saarthix.crm.service;
 
 import com.saarthix.crm.domain.Catalog;
+import com.saarthix.crm.model.Deal;
 import com.saarthix.crm.model.FollowUp;
 import com.saarthix.crm.model.Lead;
 import com.saarthix.crm.model.User;
+import com.saarthix.crm.repo.DealRepository;
 import com.saarthix.crm.repo.FollowUpRepository;
 import com.saarthix.crm.repo.LeadRepository;
 import com.saarthix.crm.repo.UserRepository;
@@ -26,15 +28,17 @@ import java.util.Map;
 public class FollowUpService {
     private final FollowUpRepository tasks;
     private final LeadRepository leads;
+    private final DealRepository deals;
     private final UserRepository users;
     private final ActivityService activities;
     private final NotificationService notifications;
     private final Scope scope;
 
-    public FollowUpService(FollowUpRepository tasks, LeadRepository leads, UserRepository users,
+    public FollowUpService(FollowUpRepository tasks, LeadRepository leads, DealRepository deals, UserRepository users,
                            ActivityService activities, NotificationService notifications, Scope scope) {
         this.tasks = tasks;
         this.leads = leads;
+        this.deals = deals;
         this.users = users;
         this.activities = activities;
         this.notifications = notifications;
@@ -84,6 +88,8 @@ public class FollowUpService {
             activities.log(lead, scope.user(), "task", "Follow-up added", task.getTitle() + " due " + dueText(task));
             syncNextFollowUp(lead.getId());
         });
+        linkedDeal(task.getDealId()).ifPresent(deal ->
+                activities.logDeal(deal, scope.user(), "task", "Activity scheduled", task.getTitle() + " due " + dueText(task)));
         return task;
     }
 
@@ -91,7 +97,14 @@ public class FollowUpService {
         linkedLead(leadId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
         return create(new TaskRequest(request.title(), request.details(), request.dueDate(), request.priority(),
                 request.status(), leadId, request.assigneeId(), request.assigneeName(),
-                request.type(), request.dueTime(), request.dueAt(), request.reminder()));
+                request.type(), request.dueTime(), request.dueAt(), request.reminder(), null));
+    }
+
+    public FollowUp createForDeal(String dealId, TaskRequest request) {
+        linkedDeal(dealId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal not found"));
+        return create(new TaskRequest(request.title(), request.details(), request.dueDate(), request.priority(),
+                request.status(), null, request.assigneeId(), request.assigneeName(),
+                request.type(), request.dueTime(), request.dueAt(), request.reminder(), dealId));
     }
 
     public FollowUp update(String id, TaskRequest request) {
@@ -136,7 +149,7 @@ public class FollowUpService {
         });
     }
 
-    private static Instant dueInstant(FollowUp task) {
+    public static Instant dueInstant(FollowUp task) {
         if (task.getDueAt() != null) return task.getDueAt();
         if (task.getDueDate() == null || task.getDueDate().isBlank()) return null;
         try {
@@ -184,6 +197,11 @@ public class FollowUpService {
         task.setStatus(request.status());
         task.setLeadId(lead == null ? "" : lead.getId());
         task.setLeadName(lead == null ? "" : lead.getName());
+        Deal deal = linkedDeal(request.dealId()).orElse(null);
+        task.setDealId(deal == null ? null : deal.getId());
+        task.setDealName(deal == null ? null : deal.getName());
+        task.setAccountId(deal == null ? null : deal.getAccountId());
+        task.setContactId(deal == null ? null : deal.getPrimaryContactId());
         task.setAssigneeId(assignee.getId());
         task.setAssigneeName(assignee.getName());
         task.setRemindedOn(null);
@@ -240,6 +258,11 @@ public class FollowUpService {
         return leads.findById(leadId).filter(lead -> scope.sameWorkspace(lead.getWorkspaceId()));
     }
 
+    private java.util.Optional<Deal> linkedDeal(String dealId) {
+        if (dealId == null || dealId.isBlank()) return java.util.Optional.empty();
+        return deals.findById(dealId).filter(deal -> scope.sameWorkspace(deal.getWorkspaceId()));
+    }
+
     private void notifyAssignee(FollowUp task, boolean created) {
         if (task.getAssigneeId() == null || task.getAssigneeId().equals(scope.id())) return;
         notifications.push(task.getAssigneeId(), task.getWorkspaceId(), "task",
@@ -265,7 +288,8 @@ public class FollowUpService {
             String type,
             String dueTime,
             String dueAt,
-            String reminder) {
+            String reminder,
+            String dealId) {
     }
 
     public record StatusRequest(@NotBlank String status) {
