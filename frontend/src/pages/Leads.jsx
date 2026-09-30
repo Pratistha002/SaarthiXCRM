@@ -8,6 +8,7 @@ import {
 } from '../lib';
 import { Avatar, Banner, Field, Modal, PriorityPill, StagePill } from '../ui';
 import LeadForm, { EMPTY_LEAD } from './LeadForm';
+import MailCompose from './MailCompose';
 
 const SORTS = [
   ['updated_desc', 'Recently updated'],
@@ -451,7 +452,15 @@ export default function Leads() {
         )}
       </div>
 
-      {emailFor && <EmailModal lead={emailFor} onClose={() => setEmailFor(null)} />}
+      {emailFor && (
+        <MailCompose
+          to={emailFor.email}
+          toName={emailFor.name}
+          company={emailFor.company || emailFor.name}
+          leadId={emailFor.id}
+          onClose={() => setEmailFor(null)}
+        />
+      )}
       {importing && <ImportModal members={members} user={user} onClose={() => setImporting(false)} onDone={async () => { setImporting(false); await load(); }} />}
     </div>
   );
@@ -519,56 +528,6 @@ function ImportModal({ members, user, onClose, onDone }) {
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
           <button className="btn" type="submit" disabled={busy || !csv.trim()}>{busy ? 'Importing…' : 'Import leads'}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function EmailModal({ lead, onClose }) {
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [mail, setMail] = useState({ configured: false, inboxUrl: '' });
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    api('/api/mail/status').then(setMail).catch(() => {});
-  }, []);
-
-  async function send(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await api('/api/mail/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
-      setSent(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal title="Send email" subtitle={`To ${lead.name}${lead.email ? ` <${lead.email}>` : ''}`} onClose={onClose} wide>
-      {!lead.email && <p className="mb-3 text-sm text-amber-700">This lead has no email address. Add one with Edit first.</p>}
-      <form className="space-y-3" onSubmit={send}>
-        <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-        <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-        {sent && (
-          <Banner tone="good">
-            Email sent{mail.inboxUrl ? `. Open the local inbox at ${mail.inboxUrl}` : '.'}
-          </Banner>
-        )}
-        {!mail.configured && (
-          <p className="text-xs text-slate-400">Sending uses the company mailbox. In Docker that is Mailpit at http://localhost:8025.</p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-          <button className="btn" type="submit" disabled={busy || !lead.email || sent}>{busy ? 'Sending…' : 'Send email'}</button>
         </div>
       </form>
     </Modal>

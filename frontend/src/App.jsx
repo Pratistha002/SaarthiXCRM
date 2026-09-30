@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
+import { isPlatformAdmin } from './lib';
 import Shell from './Shell';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -26,10 +27,26 @@ function Private({ children }) {
   return <Shell>{children}</Shell>;
 }
 
+function homeFor(user) {
+  if (!user) return '/';
+  return isPlatformAdmin(user) ? '/admin' : '/dashboard';
+}
+
+function Root() {
+  const { user } = useAuth();
+  if (user) return <Navigate to={homeFor(user)} replace />;
+  return <Home />;
+}
+
+function Fallback() {
+  const { user } = useAuth();
+  return <Navigate to={homeFor(user)} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<Root />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<Admin />} />
@@ -47,7 +64,7 @@ export default function App() {
       <Route path="/calendar" element={<Private><Calendar /></Private>} />
       <Route path="/meeting-logs" element={<Private><MeetingLogs /></Private>} />
       <Route path="/team" element={<Private><Team /></Private>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Fallback />} />
     </Routes>
   );
 }

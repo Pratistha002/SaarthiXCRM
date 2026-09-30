@@ -6,17 +6,71 @@ html, body, #root { min-height: 100%; }
 body { margin: 0; background: #f3f6fb; color: #0f172a; }
 
 .field {
-  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100;
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-900/40;
 }
 .pill-input {
-  @apply w-full rounded-full border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100;
+  @apply w-full rounded-full border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-900/40;
 }
 .btn {
   @apply inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60;
 }
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 .card {
-  @apply rounded-[28px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] ring-1 ring-slate-100;
+  @apply rounded-[28px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 dark:bg-slate-900 dark:ring-slate-800 dark:shadow-none;
 }
+
+html.dark {
+  color-scheme: dark;
+}
+html.dark body {
+  background: #020617;
+  color: #e2e8f0;
+}
+html.dark .bg-white { background-color: #0f172a; }
+html.dark .bg-white\/95 { background-color: rgb(15 23 42 / 0.95); }
+html.dark .bg-\[\#f3f6fb\] { background-color: #020617; }
+html.dark .bg-\[\#f3f6fb\]\/95 { background-color: rgb(2 6 23 / 0.95); }
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/30,
+html.dark .bg-slate-50\/40,
+html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/60,
+html.dark .bg-slate-50\/70,
+html.dark .bg-slate-50\/80 { background-color: rgb(30 41 59 / 0.7); }
+html.dark .bg-slate-100 { background-color: #1e293b; }
+html.dark .bg-slate-200 { background-color: #334155; }
+html.dark .text-slate-900 { color: #f8fafc; }
+html.dark .text-slate-800 { color: #e2e8f0; }
+html.dark .text-slate-700 { color: #cbd5e1; }
+html.dark .text-slate-600 { color: #94a3b8; }
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-200\/80 { border-color: #1e293b; }
+html.dark .ring-slate-100,
+html.dark .ring-slate-200,
+html.dark .ring-slate-200\/70 { --tw-ring-color: #1e293b; }
+html.dark .ring-white { --tw-ring-color: #0f172a; }
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover { background-color: #1e293b; }
+html.dark .hover\:bg-blue-50:hover,
+html.dark .hover\:bg-blue-50\/30:hover,
+html.dark .hover\:bg-blue-50\/40:hover { background-color: rgb(30 58 138 / 0.35); }
+html.dark .hover\:bg-rose-50:hover { background-color: rgb(127 29 29 / 0.35); }
+html.dark .bg-blue-50,
+html.dark .bg-blue-50\/30,
+html.dark .bg-blue-50\/40,
+html.dark .bg-blue-50\/60,
+html.dark .bg-blue-50\/70 { background-color: rgb(30 64 175 / 0.28); }
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/50,
+html.dark .bg-amber-50\/60,
+html.dark .bg-amber-50\/70,
+html.dark .bg-amber-50\/80 { background-color: rgb(120 53 15 / 0.28); }
+html.dark .bg-emerald-50 { background-color: rgb(6 78 59 / 0.35); }
+html.dark .bg-rose-50 { background-color: rgb(127 29 29 / 0.32); }
+html.dark .bg-sky-50 { background-color: rgb(12 74 110 / 0.32); }
+html.dark .shadow-blue-200 { --tw-shadow-color: rgb(30 64 175 / 0.35); }
