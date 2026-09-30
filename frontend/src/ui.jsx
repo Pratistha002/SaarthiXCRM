@@ -11,7 +11,7 @@ export function Logo({ light = false, compact = false }) {
         <img src="/saarthix-logo.png" alt="SaarthiX" className="h-10 w-10 object-contain" />
       </span>
       {!compact && (
-        <span className={cx('text-[15px] font-semibold tracking-tight', light ? 'text-white' : 'text-slate-900')}>
+        <span className={cx('text-[15px] font-semibold tracking-tight', light ? 'text-white' : 'text-slate-900 dark:text-slate-100')}>
           SaarthiX CRM
         </span>
       )}
@@ -49,7 +49,7 @@ export function Modal({ title, subtitle, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 p-4" onMouseDown={onClose}>
       <div
-        className={cx('max-h-[92vh] w-full overflow-auto rounded-[28px] bg-white p-6 shadow-2xl', wide ? 'max-w-2xl' : 'max-w-[460px]')}
+        className={cx('max-h-[92vh] w-full overflow-auto rounded-[28px] bg-white p-6 shadow-2xl dark:bg-slate-900 dark:text-slate-100', wide ? 'max-w-2xl' : 'max-w-[460px]')}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between gap-3">
@@ -57,7 +57,7 @@ export function Modal({ title, subtitle, onClose, children, wide }) {
             <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
             {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
           </div>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
@@ -75,14 +75,14 @@ export function Drawer({ title, onClose, children }) {
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onMouseDown={onClose}>
-      <aside className="h-full w-full max-w-[440px] overflow-auto rounded-l-[28px] bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white" aria-label="Close">
+      <aside className="flex h-full w-full max-w-[440px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-900" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <h2 className="text-[15px] font-semibold tracking-tight text-slate-800 dark:text-slate-100">{title}</h2>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700" aria-label="Close">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       </aside>
     </div>
   );
@@ -126,7 +126,7 @@ export function RolePicker({ value, onChange }) {
             onClick={() => onChange(role)}
             className={cx(
               'rounded-2xl border px-3 py-3 text-left transition',
-              selected ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+              selected ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-500',
             )}
           >
             <p className="text-sm font-semibold">{roleLabel(role)}</p>

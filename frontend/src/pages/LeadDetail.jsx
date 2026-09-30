@@ -11,6 +11,7 @@ import { Avatar, Banner, Field, Modal, Spinner } from '../ui';
 import CallModal from './CallModal';
 import ConvertLeadModal from './ConvertLeadModal';
 import LeadForm from './LeadForm';
+import MailCompose from './MailCompose';
 
 const RELATED = [
   ['notes', 'Notes'],
@@ -275,7 +276,16 @@ export default function LeadDetail() {
         </div>
       </div>
 
-      {emailOpen && <SendEmailModal lead={lead} onClose={() => setEmailOpen(false)} onSent={load} />}
+      {emailOpen && (
+        <MailCompose
+          to={lead.email}
+          toName={lead.name}
+          company={lead.company || lead.name}
+          leadId={lead.id}
+          onClose={() => setEmailOpen(false)}
+          onSent={load}
+        />
+      )}
       {converting && (
         <ConvertLeadModal lead={lead} contact={data.contact} contacts={data.contacts} members={members} onClose={() => setConverting(false)} onConverted={converted} />
       )}
@@ -662,8 +672,8 @@ function PhoneLink({ value, onCall }) {
 export function Section({ id, title, action, children }) {
   return (
     <section id={`related-${id}`} className="scroll-mt-4 rounded-2xl bg-white p-5 ring-1 ring-slate-100">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-semibold text-slate-800">{title}</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-800">{title}</h2>
         {action}
       </div>
       {children}
@@ -676,16 +686,40 @@ export function Empty({ children }) {
 }
 
 function NotesSection({ lead, notes, onChange }) {
+  return (
+    <NoteFeed
+      notes={notes}
+      linkedType="lead"
+      linkedId={lead.id}
+      linkedName={lead.name}
+      onChange={onChange}
+      viewAllTo={`/notes?lead=${lead.id}`}
+    />
+  );
+}
+
+export function NoteFeed({ notes, linkedType, linkedId, linkedName, onChange, viewAllTo }) {
+  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editBody, setEditBody] = useState('');
+  const [showAll, setShowAll] = useState(false);
+
+  const ordered = [...(notes || [])].sort((a, b) => {
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+  const limit = 5;
+  const visible = showAll ? ordered : ordered.slice(0, limit);
 
   async function add(event) {
     event.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() || busy) return;
     setBusy(true);
     try {
-      await api('/api/notes', { method: 'POST', body: { body, linkedType: 'lead', linkedId: lead.id, linkedName: lead.name } });
+      await api('/api/notes', { method: 'POST', body: { body: body.trim(), linkedType, linkedId, linkedName } });
       setBody('');
       setAdding(false);
       await onChange();
@@ -694,51 +728,171 @@ function NotesSection({ lead, notes, onChange }) {
     }
   }
 
-  async function remove(noteId) {
+  async function saveEdit(note) {
+    if (!editBody.trim()) return;
+    await api(`/api/notes/${note.id}`, {
+      method: 'PUT',
+      body: { body: editBody.trim(), pinned: Boolean(note.pinned), linkedType, linkedId, linkedName },
+    });
+    setEditingId(null);
+    setEditBody('');
+    await onChange();
+  }
+
+  async function pin(note) {
+    await api(`/api/notes/${note.id}/pin`, { method: 'PATCH' });
+    await onChange();
+  }
+
+  async function remove(note) {
     if (!window.confirm('Delete this note?')) return;
-    await api(`/api/notes/${noteId}`, { method: 'DELETE' });
+    await api(`/api/notes/${note.id}`, { method: 'DELETE' });
     await onChange();
   }
 
   return (
     <Section
       id="notes"
-      title="Notes"
+      title={(
+        <>
+          Notes
+          {ordered.length > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">{ordered.length}</span>
+          )}
+        </>
+      )}
       action={(
-        <span className="flex items-center gap-3">
-          <Link className="text-sm font-medium text-blue-700" to={`/notes?lead=${lead.id}`}>View all notes</Link>
-          {!adding && <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => setAdding(true)}>+ Add Note</button>}
+        <span className="flex items-center gap-2">
+          {viewAllTo && <Link className="text-sm font-medium text-blue-600 hover:underline" to={viewAllTo}>View all notes</Link>}
+          {!adding && (
+            <button type="button" className="btn !rounded-lg !px-3 !py-1.5" onClick={() => setAdding(true)}>+ Add Note</button>
+          )}
         </span>
       )}
     >
-      {adding && (
-        <form onSubmit={add} className="mb-4 space-y-2 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-          <textarea autoFocus className="field min-h-[80px] !rounded-xl" placeholder={`Write a note on ${lead.name}…`} value={body} onChange={(event) => setBody(event.target.value)} />
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => { setAdding(false); setBody(''); }}>Cancel</button>
-            <button type="submit" className="btn !rounded-lg !py-1.5" disabled={busy || !body.trim()}>Save</button>
+      {adding ? (
+        <form onSubmit={add} className="mb-4 rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
+          <div className="flex items-start gap-3">
+            <Avatar name={user?.name || 'You'} size="sm" />
+            <div className="min-w-0 flex-1">
+              <textarea
+                autoFocus
+                className="field min-h-[88px] !rounded-xl !bg-white"
+                placeholder={`Write a note on ${linkedName}…`}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') add(event);
+                }}
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-400">Ctrl + Enter to save</p>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => { setAdding(false); setBody(''); }}>Cancel</button>
+                  <button type="submit" className="btn !rounded-lg !py-1.5" disabled={busy || !body.trim()}>{busy ? 'Saving…' : 'Save note'}</button>
+                </div>
+              </div>
+            </div>
           </div>
         </form>
+      ) : (
+        <button
+          type="button"
+          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-2.5 text-left transition hover:border-blue-200 hover:bg-blue-50/40"
+          onClick={() => setAdding(true)}
+        >
+          <Avatar name={user?.name || 'You'} size="sm" />
+          <span className="text-sm text-slate-400">Write a note on {linkedName}…</span>
+        </button>
       )}
-      <ul className="space-y-3">
-        {notes.map((note) => (
-          <li key={note.id} className="flex items-start gap-3 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100">
-            <Avatar name={note.authorName || 'You'} size="sm" />
-            <div className="min-w-0 flex-1">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{note.body}</p>
-              <p className="mt-1.5 text-xs text-slate-400">{note.authorName || 'You'} · {prettyDate(note.createdAt)}</p>
-            </div>
-            <button type="button" className="text-xs font-medium text-slate-400 hover:text-rose-600" onClick={() => remove(note.id)}>Delete</button>
-          </li>
-        ))}
+
+      <ul className="space-y-2.5">
+        {visible.map((note) => {
+          const editing = editingId === note.id;
+          return (
+            <li
+              key={note.id}
+              className={cx(
+                'group rounded-2xl border p-3.5 transition',
+                note.pinned ? 'border-amber-100 bg-amber-50/60' : 'border-slate-100 bg-slate-50/70 hover:border-slate-200 hover:bg-white',
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <Avatar name={note.authorName || 'You'} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-800">{note.authorName || 'You'}</p>
+                        {note.pinned && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Pinned</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {ago(note.createdAt)}
+                        {note.createdAt ? ` · ${prettyDate(note.createdAt)}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button type="button" className={cx('grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-amber-600', note.pinned && 'bg-white text-amber-600')} onClick={() => pin(note)} aria-label={note.pinned ? 'Unpin note' : 'Pin note'}>
+                        <PinIcon />
+                      </button>
+                      <button type="button" className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-slate-700" onClick={() => { setEditingId(note.id); setEditBody(note.body || ''); }} aria-label="Edit note">
+                        <EditIcon />
+                      </button>
+                      <button type="button" className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-rose-600" onClick={() => remove(note)} aria-label="Delete note">
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </div>
+                  {editing ? (
+                    <div className="mt-2">
+                      <textarea className="field min-h-[80px] !rounded-xl !bg-white" value={editBody} onChange={(event) => setEditBody(event.target.value)} />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => { setEditingId(null); setEditBody(''); }}>Cancel</button>
+                        <button type="button" className="btn !rounded-lg !py-1.5" disabled={!editBody.trim()} onClick={() => saveEdit(note)}>Save</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{note.body}</p>
+                  )}
+                </div>
+              </div>
+            </li>
+          );
+        })}
       </ul>
-      {notes.length === 0 && !adding && (
-        <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center">
-          <p className="text-sm font-medium text-slate-600">No notes yet</p>
-          <p className="mt-1 text-xs text-slate-400">Capture what was said so the team can pick this up later.</p>
-        </div>
+
+      {ordered.length > limit && (
+        <button type="button" className="mt-3 w-full rounded-xl py-2 text-sm font-medium text-blue-600 hover:bg-blue-50" onClick={() => setShowAll((current) => !current)}>
+          {showAll ? 'Show fewer notes' : `Show all ${ordered.length} notes`}
+        </button>
       )}
     </Section>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+      <path d="M14.5 3.5 20 9l-1.2 1.2-2.1-.3-3.4 3.4V21l-2.6-3.8-3.2 1.1 1.6-4.6-2.2-2.2-.3-2.1L8.8 8.4 14.5 3.5z" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 20h4L19 9l-4-4L4 16v4z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M5 7h14M10 7V5h4v2M8 7l1 12h6l1-12" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -1225,45 +1379,6 @@ function InlineNote({ lead, onDone }) {
       <button type="submit" className="btn !rounded-md !py-1.5" disabled={busy || !body.trim()}>Save</button>
       <button type="button" className="btn-ghost !rounded-md !py-1.5" onClick={() => onDone(false)}>Cancel</button>
     </form>
-  );
-}
-
-function SendEmailModal({ lead, onClose, onSent }) {
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
-
-  async function send(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await api('/api/mail/send', { method: 'POST', body: { leadId: lead.id, subject, body } });
-      setSent(true);
-      await onSent();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal title="Send Email" subtitle={`To ${lead.name}${lead.email ? ` <${lead.email}>` : ''}`} onClose={onClose} wide>
-      {!lead.email && <div className="mb-3"><Banner tone="warn">This lead has no email address. Add one with Edit first.</Banner></div>}
-      <form onSubmit={send} className="space-y-3">
-        <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-        <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-        {sent && <Banner tone="good">Email sent to {lead.email}. In Docker you can read it at http://localhost:8025.</Banner>}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-          <button type="submit" className="btn" disabled={busy || !lead.email}>{busy ? <Spinner /> : null}Send</button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 

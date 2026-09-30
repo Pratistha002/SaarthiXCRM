@@ -6,11 +6,12 @@ import { useTeam } from '../useTeam';
 import {
   NEXT_ACTIONS, NO_FURTHER_ACTION, PRIORITIES, REMINDERS, ago, cx, isOverdue, isoDay, money, nextActionLabel, prettyDate, prettyTime,
 } from '../lib';
-import { Avatar, Banner, Field, Modal, Spinner } from '../ui';
+import { Banner, Field, Modal, Spinner } from '../ui';
 import CallModal from './CallModal';
 import { LostModal, WonModal } from './DealModals';
+import MailCompose from './MailCompose';
 import {
-  CallEntry, Empty, Info, Section, callResult, dayKey, dueText, groupByDay, size, splitChange, stamp,
+  CallEntry, Empty, Info, NoteFeed, Section, callResult, dayKey, dueText, groupByDay, size, splitChange, stamp,
 } from './LeadDetail';
 
 const MEETING_TYPES = ['Meeting', 'Demo', 'Visit'];
@@ -275,7 +276,16 @@ export default function DealDetail() {
           }}
         />
       )}
-      {modal === 'email' && <DealEmailModal deal={deal} contact={contact} onClose={() => setModal(null)} onSent={() => done('Email sent.')} />}
+      {modal === 'email' && (
+        <MailCompose
+          to={contact?.email}
+          toName={contact?.name || deal.primaryContactName || deal.accountName}
+          company={deal.accountName}
+          dealId={deal.id}
+          onClose={() => setModal(null)}
+          onSent={() => done('Email sent.')}
+        />
+      )}
       {modal === 'activity' && <ActivityModal deal={deal} members={members} user={user} onClose={() => setModal(null)} onSaved={() => done('Activity scheduled.')} />}
       {modal === 'edit' && <EditDealModal deal={deal} meta={meta} members={members} contacts={data.accountContacts} onClose={() => setModal(null)} onSaved={() => done('Deal updated.')} />}
       {modal === 'won' && <WonModal deal={deal} onClose={() => setModal(null)} onDone={() => done('Deal marked as Won.')} />}
@@ -356,44 +366,14 @@ function TaskSection({ id, title, tasks, onChange, action, empty }) {
 }
 
 function DealNotes({ deal, notes, onChange }) {
-  const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function add(event) {
-    event.preventDefault();
-    if (!body.trim() || busy) return;
-    setBusy(true);
-    try {
-      await api('/api/notes', { method: 'POST', body: { body, linkedType: 'deal', linkedId: deal.id, linkedName: deal.name } });
-      setBody('');
-      await onChange();
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
-    <Section id="notes" title="Notes">
-      <form onSubmit={add} className="flex gap-2 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-        <textarea className="field min-h-[72px] flex-1 !rounded-xl" placeholder="Add a note on this deal…" value={body} onChange={(event) => setBody(event.target.value)} />
-        <button type="submit" className="btn !rounded-lg self-start" disabled={busy || !body.trim()}>Save</button>
-      </form>
-      <ul className="mt-3 space-y-3">
-        {notes.map((note) => (
-          <li key={note.id} className="flex items-start gap-3 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100">
-            <Avatar name={note.authorName || 'You'} size="sm" />
-            <div>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{note.body}</p>
-              <p className="mt-1.5 text-xs text-slate-400">{note.authorName || 'You'} · {ago(note.createdAt)}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {notes.length === 0 && (
-        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center">
-          <p className="text-sm font-medium text-slate-600">No notes yet</p>
-          <p className="mt-1 text-xs text-slate-400">Record what was discussed so the next person has context.</p>
-        </div>
-      )}
-    </Section>
+    <NoteFeed
+      notes={notes}
+      linkedType="deal"
+      linkedId={deal.id}
+      linkedName={deal.name}
+      onChange={onChange}
+    />
   );
 }
 
@@ -516,40 +496,6 @@ function DealTimeline({ items, deal, contact }) {
       ))}
       {items.length === 0 && <Empty>No history yet.</Empty>}
     </section>
-  );
-}
-
-function DealEmailModal({ deal, contact, onClose, onSent }) {
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function send(event) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await api('/api/mail/send', { method: 'POST', body: { dealId: deal.id, subject, body } });
-      await onSent();
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  }
-  return (
-    <Modal title="Send Email" subtitle={contact ? `To ${contact.name}${contact.email ? ` <${contact.email}>` : ''}` : 'No primary contact'} onClose={onClose} wide>
-      {!contact?.email && <div className="mb-3"><Banner tone="warn">The primary contact has no email address. Add one on the contact first.</Banner></div>}
-      <form onSubmit={send} className="space-y-3">
-        <Field label="Subject"><input className="field" required value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-        <Field label="Message"><textarea className="field min-h-48" required value={body} onChange={(event) => setBody(event.target.value)} /></Field>
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn" disabled={busy || !contact?.email}>{busy && <Spinner />}Send</button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 
