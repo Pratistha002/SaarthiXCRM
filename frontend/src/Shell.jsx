@@ -3,23 +3,23 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
 import { ago, cx, isHeadOfSales, isPlatformAdmin } from './lib';
-import { Field, Logo, Modal, RolePicker } from './ui';
+import { Avatar, Field, Logo, Modal, RolePicker } from './ui';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/leads', label: 'Leads' },
   { to: '/pipeline', label: 'Pipeline' },
   { to: '/sales', label: 'Sales & Forecast' },
+  { to: '/contacts', label: 'Contacts' },
   {
     label: 'Activities',
     children: [
       { to: '/notes', label: 'Notes', hint: 'Lead notes in one thread' },
       { to: '/calendar', label: 'Calendar', hint: 'Calls, demos, visits and tasks' },
+      { to: '/follow-ups', label: 'Follow-ups', hint: 'Tasks and next actions' },
       { to: '/meeting-logs', label: 'Meeting logs', hint: 'What was discussed and next steps' },
     ],
   },
-  { to: '/contacts', label: 'Contacts' },
-  { to: '/follow-ups', label: 'Follow-ups' },
 ];
 
 function Icon({ name }) {
@@ -45,17 +45,17 @@ const RAIL = [
   { to: '/leads', icon: 'leads', label: 'Leads' },
   { to: '/pipeline', icon: 'pipe', label: 'Pipeline' },
   { to: '/sales', icon: 'chart', label: 'Sales & Forecast' },
+  { to: '/contacts', icon: 'people', label: 'Contacts' },
   {
     icon: 'activity',
     label: 'Activities',
     children: [
       { to: '/notes', icon: 'note', label: 'Notes' },
       { to: '/calendar', icon: 'cal', label: 'Calendar' },
+      { to: '/follow-ups', icon: 'task', label: 'Follow-ups' },
       { to: '/meeting-logs', icon: 'log', label: 'Meeting logs' },
     ],
   },
-  { to: '/contacts', icon: 'people', label: 'Contacts' },
-  { to: '/follow-ups', icon: 'task', label: 'Follow-ups' },
 ];
 
 function activityActive(pathname, children) {
@@ -72,7 +72,7 @@ function ActivitiesMenu({ item, compact }) {
         type="button"
         onClick={() => setOpen((value) => !value)}
         className={cx(
-          compact ? 'whitespace-nowrap rounded-full px-3 py-1.5 text-sm' : 'rounded-full px-3.5 py-2 text-sm font-medium transition',
+          compact ? 'whitespace-nowrap rounded-full px-3 py-1.5 text-sm' : 'rounded-full px-3 py-2 text-sm font-medium transition',
           compact
             ? (active || open ? 'bg-slate-900 text-white' : 'text-slate-500')
             : (active || open ? 'text-slate-900' : 'text-slate-400 hover:text-slate-700'),
@@ -108,7 +108,6 @@ export default function Shell({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [railOpen, setRailOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -128,7 +127,7 @@ export default function Shell({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!searchOpen || query.trim().length < 2) {
+    if (query.trim().length < 2) {
       setHits(null);
       return undefined;
     }
@@ -136,7 +135,7 @@ export default function Shell({ children }) {
       api(`/api/search?q=${encodeURIComponent(query.trim())}`).then(setHits).catch(() => {});
     }, 250);
     return () => clearTimeout(timer);
-  }, [query, searchOpen]);
+  }, [query]);
 
   const unread = notifications.filter((item) => !item.read).length;
 
@@ -159,8 +158,146 @@ export default function Shell({ children }) {
 
   return (
     <div className="min-h-screen bg-[#f3f6fb]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col items-center border-r border-slate-200/80 bg-white py-4 lg:flex">
-        <div className="mb-6 h-9 w-9" />
+      <header className="sticky top-0 z-40 flex h-[74px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3 backdrop-blur md:px-4">
+        <Logo />
+        <nav className="hidden shrink-0 items-center gap-0.5 lg:flex">
+          {NAV.map((item) => item.children ? (
+            <ActivitiesMenu key={item.label} item={item} />
+          ) : (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => cx(
+                'rounded-full px-3 py-2 text-sm font-medium transition',
+                isActive ? 'text-slate-900' : 'text-slate-400 hover:text-slate-700',
+              )}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="relative mx-2 min-w-0 max-w-md flex-1">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+            <Icon name="search" />
+          </span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search leads, contacts, notes"
+            className="pill-input !py-2.5"
+            aria-label="Search leads, contacts and notes"
+          />
+          {query && (
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400 hover:text-slate-700"
+              onClick={() => { setQuery(''); setHits(null); }}
+            >
+              Clear
+            </button>
+          )}
+          {hits && (
+            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200">
+              {hits.leads?.map((lead) => (
+                <button key={lead.id} type="button" className="block w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setQuery(''); setHits(null); navigate(`/leads?lead=${lead.id}`); }}>
+                  <div className="font-medium">{lead.name}</div>
+                  <div className="text-xs text-slate-500">{lead.company} · Lead</div>
+                </button>
+              ))}
+              {hits.contacts?.map((contact) => (
+                <button key={contact.id} type="button" className="block w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setQuery(''); setHits(null); navigate('/contacts'); }}>
+                  <div className="font-medium">{contact.name}</div>
+                  <div className="text-xs text-slate-500">{contact.company} · Contact</div>
+                </button>
+              ))}
+              {hits.notes?.map((note) => (
+                <button key={note.id} type="button" className="block w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setQuery(''); setHits(null); navigate('/notes'); }}>
+                  <div className="line-clamp-2">{note.body}</div>
+                  <div className="text-xs text-slate-500">Note</div>
+                </button>
+              ))}
+              {!hits.leads?.length && !hits.contacts?.length && !hits.notes?.length && (
+                <p className="px-3 py-3 text-sm text-slate-400">No matches</p>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              className="relative grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+              onClick={() => { setNotificationsOpen((open) => !open); setMenuOpen(false); }}
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <Icon name="bell" />
+              {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
+            </button>
+            {notificationsOpen && (
+              <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <p className="text-sm font-semibold">Notifications</p>
+                  <button type="button" className="text-xs font-medium text-blue-600" onClick={markAll}>Mark all read</button>
+                </div>
+                <div className="max-h-80 space-y-1 overflow-auto">
+                  {notifications.length === 0 && <p className="px-2 py-4 text-sm text-slate-400">You are all caught up.</p>}
+                  {notifications.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={cx('w-full rounded-xl px-3 py-2 text-left', item.read ? '' : 'bg-blue-50/70')}
+                      onClick={() => { setNotificationsOpen(false); if (item.link) navigate(item.link); }}
+                    >
+                      <p className="text-sm font-medium">{item.title}</p>
+                      <p className="text-xs text-slate-500">{item.body}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{ago(item.createdAt)}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              title={user?.name || 'Account'}
+              aria-label="Account"
+              className="relative grid h-10 w-10 place-items-center rounded-full ring-2 ring-slate-100"
+              onClick={() => { setMenuOpen((open) => !open); setNotificationsOpen(false); }}
+            >
+              <Avatar name={user?.name || 'Account'} />
+              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-12 w-64 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200">
+                <p className="px-3 pt-2 text-sm font-semibold">{user?.name}</p>
+                <p className="px-3 text-xs text-slate-500">{user?.email}</p>
+                <div className="mt-2 space-y-1">
+                  {isPlatformAdmin(user) && (
+                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/admin'); }}>Admin console</button>
+                  )}
+                  <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/team'); }}>Team</button>
+                  <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => {
+                    setMenuOpen(false);
+                    setError('');
+                    setProfile({
+                      name: user?.name || '',
+                      company: user?.company || '',
+                      title: user?.title || '',
+                      role: isHeadOfSales(user?.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE',
+                    });
+                    setEditing(true);
+                  }}>Edit profile</button>
+                  <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
+                </div>
+              </div>
+              )}
+          </div>
+        </div>
+      </header>
+
+      <aside className="fixed bottom-0 left-0 top-[74px] z-30 hidden w-[72px] flex-col items-center border-r border-slate-200/80 bg-white py-3 lg:flex">
         <div className="flex flex-1 flex-col items-center gap-2">
           {RAIL.map((item) => item.children ? (
             <div key={item.label} className="relative">
@@ -215,127 +352,7 @@ export default function Shell({ children }) {
       </aside>
 
       <div className="lg:pl-[72px]">
-        <header className="sticky top-0 z-20 flex h-[74px] items-center gap-4 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6">
-          <Logo />
-          <nav className="ml-2 hidden items-center gap-1 xl:flex">
-            {NAV.map((item) => item.children ? (
-              <ActivitiesMenu key={item.label} item={item} />
-            ) : (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => cx(
-                  'rounded-full px-3.5 py-2 text-sm font-medium transition',
-                  isActive ? 'text-slate-900' : 'text-slate-400 hover:text-slate-700',
-                )}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 sm:inline-flex">
-              <span className="grid h-4 w-4 place-items-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
-              Welcome back, {user?.name?.split(' ')[0] || 'there'}
-            </div>
-            <div className="relative">
-              <button
-                type="button"
-                className="relative grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
-                onClick={() => { setNotificationsOpen((open) => !open); setMenuOpen(false); setSearchOpen(false); }}
-                aria-label="Notifications"
-                title="Notifications"
-              >
-                <Icon name="bell" />
-                {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
-              </button>
-              {notificationsOpen && (
-                <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <p className="text-sm font-semibold">Notifications</p>
-                    <button type="button" className="text-xs font-medium text-blue-600" onClick={markAll}>Mark all read</button>
-                  </div>
-                  <div className="max-h-80 space-y-1 overflow-auto">
-                    {notifications.length === 0 && <p className="px-2 py-4 text-sm text-slate-400">You are all caught up.</p>}
-                    {notifications.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={cx('w-full rounded-xl px-3 py-2 text-left', item.read ? '' : 'bg-blue-50/70')}
-                        onClick={() => { setNotificationsOpen(false); if (item.link) navigate(item.link); }}
-                      >
-                        <p className="text-sm font-medium">{item.title}</p>
-                        <p className="text-xs text-slate-500">{item.body}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">{ago(item.createdAt)}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <button type="button" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => { setMenuOpen((open) => !open); setSearchOpen(false); setNotificationsOpen(false); }} aria-label="Menu">
-                <Icon name="menu" />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-12 w-64 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-200">
-                  <p className="px-3 pt-2 text-sm font-semibold">{user?.name}</p>
-                  <p className="px-3 text-xs text-slate-500">{user?.email}</p>
-                  <div className="mt-2 space-y-1">
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>Search</button>
-                    {isPlatformAdmin(user) && (
-                      <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/admin'); }}>Admin console</button>
-                    )}
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuOpen(false); navigate('/team'); }}>Team</button>
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => {
-                      setMenuOpen(false);
-                      setError('');
-                      setProfile({
-                        name: user?.name || '',
-                        company: user?.company || '',
-                        title: user?.title || '',
-                        role: isHeadOfSales(user?.role) ? 'HEAD_OF_SALES' : 'SALES_EXECUTIVE',
-                      });
-                      setEditing(true);
-                    }}>Edit profile</button>
-                    <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
-                  </div>
-                </div>
-              )}
-              {searchOpen && (
-                <div className="absolute right-0 top-12 w-[340px] rounded-2xl bg-white p-3 shadow-2xl ring-1 ring-slate-200">
-                  <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads, contacts, notes" className="field" />
-                  {hits && (
-                    <div className="mt-3 max-h-80 space-y-2 overflow-auto text-sm">
-                      {hits.leads?.map((lead) => (
-                        <button key={lead.id} type="button" className="block w-full rounded-xl px-2 py-2 text-left hover:bg-slate-50" onClick={() => { setSearchOpen(false); navigate(`/leads?lead=${lead.id}`); }}>
-                          <div className="font-medium">{lead.name}</div>
-                          <div className="text-xs text-slate-500">{lead.company} · Lead</div>
-                        </button>
-                      ))}
-                      {hits.contacts?.map((contact) => (
-                        <button key={contact.id} type="button" className="block w-full rounded-xl px-2 py-2 text-left hover:bg-slate-50" onClick={() => { setSearchOpen(false); navigate('/contacts'); }}>
-                          <div className="font-medium">{contact.name}</div>
-                          <div className="text-xs text-slate-500">{contact.company} · Contact</div>
-                        </button>
-                      ))}
-                      {hits.notes?.map((note) => (
-                        <button key={note.id} type="button" className="block w-full rounded-xl px-2 py-2 text-left hover:bg-slate-50" onClick={() => { setSearchOpen(false); navigate('/notes'); }}>
-                          <div className="line-clamp-2">{note.body}</div>
-                          <div className="text-xs text-slate-500">Note</div>
-                        </button>
-                      ))}
-                      {!hits.leads?.length && !hits.contacts?.length && !hits.notes?.length && (
-                        <p className="px-2 py-3 text-slate-400">No matches</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-        <div className="flex gap-2 overflow-auto border-b border-slate-200/70 bg-white px-4 py-2 xl:hidden">
+        <div className="flex gap-2 overflow-auto border-b border-slate-200/70 bg-white px-4 py-2 lg:hidden">
           {NAV.map((item) => item.children ? (
             <ActivitiesMenu key={item.label} item={item} compact />
           ) : (
