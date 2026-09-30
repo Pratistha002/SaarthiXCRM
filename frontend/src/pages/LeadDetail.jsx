@@ -7,7 +7,7 @@ import {
   EXIT_STAGES, FUNNEL_STAGES, PRIORITIES, ago, canSeeTeamData, closeReasons, cx, dueLabel, followUpStatusLabel, isAwaitingApproval, isExitStage, isOverdue, isoDay, money, prettyDate, prettyTime,
   primaryPhone,
 } from '../lib';
-import { Banner, Field, Modal, Spinner } from '../ui';
+import { Avatar, Banner, Field, Modal, Spinner } from '../ui';
 import CallModal from './CallModal';
 import ConvertLeadModal from './ConvertLeadModal';
 import LeadForm from './LeadForm';
@@ -712,26 +712,32 @@ function NotesSection({ lead, notes, onChange }) {
       )}
     >
       {adding && (
-        <form onSubmit={add} className="mb-2 space-y-2">
-          <textarea autoFocus className="field min-h-[72px] !rounded-md" placeholder="Add a note…" value={body} onChange={(event) => setBody(event.target.value)} />
+        <form onSubmit={add} className="mb-4 space-y-2 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+          <textarea autoFocus className="field min-h-[80px] !rounded-xl" placeholder={`Write a note on ${lead.name}…`} value={body} onChange={(event) => setBody(event.target.value)} />
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost !rounded-lg !py-1.5" onClick={() => { setAdding(false); setBody(''); }}>Cancel</button>
             <button type="submit" className="btn !rounded-lg !py-1.5" disabled={busy || !body.trim()}>Save</button>
           </div>
         </form>
       )}
-      <ul className="divide-y divide-slate-100">
+      <ul className="space-y-3">
         {notes.map((note) => (
-          <li key={note.id} className="flex items-start justify-between gap-3 py-3">
-            <div>
-              <p className="whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
-              <p className="mt-1 text-xs text-slate-400">{note.authorName} · {prettyDate(note.createdAt)}</p>
+          <li key={note.id} className="flex items-start gap-3 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100">
+            <Avatar name={note.authorName || 'You'} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{note.body}</p>
+              <p className="mt-1.5 text-xs text-slate-400">{note.authorName || 'You'} · {prettyDate(note.createdAt)}</p>
             </div>
-            <button type="button" className="text-xs text-slate-400 hover:text-rose-600" onClick={() => remove(note.id)}>Delete</button>
+            <button type="button" className="text-xs font-medium text-slate-400 hover:text-rose-600" onClick={() => remove(note.id)}>Delete</button>
           </li>
         ))}
       </ul>
-      {notes.length === 0 && !adding && <Empty>No notes yet.</Empty>}
+      {notes.length === 0 && !adding && (
+        <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center">
+          <p className="text-sm font-medium text-slate-600">No notes yet</p>
+          <p className="mt-1 text-xs text-slate-400">Capture what was said so the team can pick this up later.</p>
+        </div>
+      )}
     </Section>
   );
 }

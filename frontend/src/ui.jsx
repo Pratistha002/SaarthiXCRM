@@ -5,13 +5,10 @@ export function Logo({ light = false, compact = false }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className={cx(
-        'grid h-9 w-9 place-items-center rounded-full shadow-sm',
-        light ? 'bg-white/15 ring-1 ring-white/30' : 'bg-gradient-to-br from-blue-500 to-blue-700',
+        'grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl',
+        light && 'bg-white/95 ring-1 ring-white/40',
       )}>
-        <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M12 3l1.6 4.2L18 9l-4.4 1.8L12 15l-1.6-4.2L6 9l4.4-1.8L12 3z" fill="currentColor" stroke="none" />
-          <path d="M7 16.5c1.8 2 4.2 3 5 3s3.2-1 5-3" strokeLinecap="round" />
-        </svg>
+        <img src="/saarthix-logo.png" alt="SaarthiX" className="h-10 w-10 object-contain" />
       </span>
       {!compact && (
         <span className={cx('text-[15px] font-semibold tracking-tight', light ? 'text-white' : 'text-slate-900')}>

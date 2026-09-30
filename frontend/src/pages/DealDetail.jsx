@@ -6,7 +6,7 @@ import { useTeam } from '../useTeam';
 import {
   NEXT_ACTIONS, NO_FURTHER_ACTION, PRIORITIES, REMINDERS, ago, cx, isOverdue, isoDay, money, nextActionLabel, prettyDate, prettyTime,
 } from '../lib';
-import { Banner, Field, Modal, Spinner } from '../ui';
+import { Avatar, Banner, Field, Modal, Spinner } from '../ui';
 import CallModal from './CallModal';
 import { LostModal, WonModal } from './DealModals';
 import {
@@ -372,19 +372,27 @@ function DealNotes({ deal, notes, onChange }) {
   }
   return (
     <Section id="notes" title="Notes">
-      <form onSubmit={add} className="flex gap-2">
-        <textarea className="field min-h-[44px] flex-1 !rounded-md" placeholder="Add a note…" value={body} onChange={(event) => setBody(event.target.value)} />
+      <form onSubmit={add} className="flex gap-2 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+        <textarea className="field min-h-[72px] flex-1 !rounded-xl" placeholder="Add a note on this deal…" value={body} onChange={(event) => setBody(event.target.value)} />
         <button type="submit" className="btn !rounded-lg self-start" disabled={busy || !body.trim()}>Save</button>
       </form>
-      <ul className="mt-3 divide-y divide-slate-100">
+      <ul className="mt-3 space-y-3">
         {notes.map((note) => (
-          <li key={note.id} className="py-3">
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
-            <p className="mt-1 text-xs text-slate-400">{note.authorName} · {ago(note.createdAt)}</p>
+          <li key={note.id} className="flex items-start gap-3 rounded-2xl bg-slate-50/80 p-3 ring-1 ring-slate-100">
+            <Avatar name={note.authorName || 'You'} size="sm" />
+            <div>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{note.body}</p>
+              <p className="mt-1.5 text-xs text-slate-400">{note.authorName || 'You'} · {ago(note.createdAt)}</p>
+            </div>
           </li>
         ))}
       </ul>
-      {notes.length === 0 && <Empty>No notes yet.</Empty>}
+      {notes.length === 0 && (
+        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center">
+          <p className="text-sm font-medium text-slate-600">No notes yet</p>
+          <p className="mt-1 text-xs text-slate-400">Record what was discussed so the next person has context.</p>
+        </div>
+      )}
     </Section>
   );
 }
