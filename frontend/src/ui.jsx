@@ -75,9 +75,9 @@ export function Drawer({ title, onClose, children }) {
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onMouseDown={onClose}>
-      <aside className="h-full w-full max-w-[420px] overflow-auto bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold">{title}</h2>
+      <aside className="h-full w-full max-w-[440px] overflow-auto rounded-l-[28px] bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white" aria-label="Close">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>

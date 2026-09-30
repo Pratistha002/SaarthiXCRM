@@ -242,16 +242,18 @@ function Section({ title, tasks, canAssign, onToggle, onEdit, onDelete, onApprov
           const awaiting = isAwaitingApproval(task);
           const canEdit = canAssign || !awaiting;
           return (
-          <div key={task.id} className="flex items-start gap-3 py-3">
-            <button type="button" onClick={() => onToggle(task)} disabled={awaiting} className={cx('mt-1 h-5 w-5 rounded-full border', task.status === 'Completed' ? 'border-blue-600 bg-blue-600' : 'border-slate-300', awaiting && 'opacity-40')} aria-label="Toggle complete" />
+          <div key={task.id} className="flex items-start gap-3 rounded-2xl px-2 py-3 transition hover:bg-slate-50">
+            <button type="button" onClick={() => onToggle(task)} disabled={awaiting} className={cx('mt-1 grid h-5 w-5 place-items-center rounded-full border', task.status === 'Completed' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300', awaiting && 'opacity-40')} aria-label="Toggle complete">
+              {task.status === 'Completed' && <span className="text-[10px] leading-none">✓</span>}
+            </button>
             <div className="min-w-0 flex-1">
               <p className={cx('font-medium', task.status === 'Completed' && 'text-slate-400 line-through')}>{task.title}</p>
-              {task.details && <p className="text-sm text-slate-500">{task.details}</p>}
+              {task.details && <p className="mt-0.5 line-clamp-2 text-sm text-slate-500">{task.details}</p>}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                {isOverdue(task) && <span className="text-rose-500">△ Overdue · {dueLabel(task.dueDate)}</span>}
+                {isOverdue(task) && <span className="rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-600">Overdue · {dueLabel(task.dueDate)}</span>}
                 {!isOverdue(task) && <span className="text-slate-400">{dueLabel(task.dueDate)}</span>}
                 <PriorityPill value={task.priority} />
-                <span className={cx('rounded-full px-2 py-0.5', awaiting ? 'bg-amber-50 text-amber-700' : followUpStatusLabel(task) === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-600')}>{followUpStatusLabel(task)}</span>
+                <span className={cx('rounded-full px-2 py-0.5', awaiting ? 'bg-amber-50 text-amber-700' : followUpStatusLabel(task) === 'Approved' ? 'bg-emerald-50 text-emerald-700' : followUpStatusLabel(task) === 'Completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-600')}>{followUpStatusLabel(task)}</span>
                 {task.assigneeName && (
                   <span className="inline-flex items-center gap-1 text-slate-500">
                     <Avatar name={task.assigneeName} size="sm" />
@@ -261,10 +263,10 @@ function Section({ title, tasks, canAssign, onToggle, onEdit, onDelete, onApprov
               </div>
             </div>
             {awaiting && canAssign && (
-              <button type="button" className="text-xs font-medium text-emerald-600" onClick={() => onApprove(task)}>Approve</button>
+              <button type="button" className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700" onClick={() => onApprove(task)}>Approve</button>
             )}
-            {canEdit ? <button type="button" className="text-xs text-slate-400" onClick={() => onEdit(task)}>Edit</button> : <span className="text-xs text-amber-600">Waiting for approval</span>}
-            <button type="button" className="text-xs text-rose-400" onClick={() => onDelete(task)}>Delete</button>
+            {canEdit ? <button type="button" className="text-xs font-medium text-slate-400 hover:text-slate-700" onClick={() => onEdit(task)}>Edit</button> : <span className="text-xs text-amber-600">Waiting</span>}
+            <button type="button" className="text-xs font-medium text-rose-400 hover:text-rose-600" onClick={() => onDelete(task)}>Delete</button>
           </div>
           );
         })}
