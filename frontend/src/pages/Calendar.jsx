@@ -643,47 +643,116 @@ function EventForm({ editor, setEditor, leads, members, canManage, user, busy, e
 function EventDrawer({ event, canManage, onClose, onEdit, onComplete, onDelete }) {
   const awaiting = isAwaitingApproval(event);
   const overdue = isOverdue(event);
+  const done = event.status === 'Completed';
+  const status = followUpStatusLabel(event);
   return (
     <Drawer title={event.type || 'Event'} onClose={onClose}>
-      <div className="space-y-4 px-5 py-4">
-        <div>
-          <p className="text-xl font-semibold tracking-tight">{event.title}</p>
-          <p className="mt-1 text-sm text-slate-500">
-            {dueLabel(event.dueDate)}{event.dueTime ? ` · ${formatClock(event.dueTime)}` : ' · All day'}
-            {event.durationMinutes ? ` · ${event.durationMinutes} min` : ''}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className={cx('rounded-full px-2.5 py-1 font-medium ring-1', EVENT_TONE[event.type])}>{eventIcon(event.type)} {event.type}</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1">{followUpStatusLabel(event)}</span>
-          {overdue && <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-600">Overdue</span>}
-          {event.conflict && <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-600">Scheduling conflict</span>}
-          {event.logged && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">Logged</span>}
-        </div>
-        {event.conflicts?.length > 0 && (
-          <Banner tone="warn">Overlaps {event.conflicts.map((item) => item.title).join(', ')}. Move one so the same person is not double-booked.</Banner>
-        )}
-        <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-sm">
-          {event.leadName && <><dt className="text-slate-400">Lead</dt><dd><Link className="text-blue-700" to={`/leads/${event.leadId}`}>{event.leadName}</Link></dd></>}
-          {event.dealName && <><dt className="text-slate-400">Deal</dt><dd><Link className="text-blue-700" to={`/deals/${event.dealId}`}>{event.dealName}</Link></dd></>}
-          <dt className="text-slate-400">Owner</dt><dd>{event.assigneeName}</dd>
-          {event.attendeeNames?.length > 0 && <><dt className="text-slate-400">Attendees</dt><dd>{event.attendeeNames.join(', ')}</dd></>}
-          {event.location && <><dt className="text-slate-400">Location</dt><dd>{event.location}</dd></>}
-          {event.meetingLink && <><dt className="text-slate-400">Link</dt><dd><a className="break-all text-blue-700" href={event.meetingLink} target="_blank" rel="noreferrer">{event.meetingLink}</a></dd></>}
-          {event.contactPerson && <><dt className="text-slate-400">Contact</dt><dd>{event.contactPerson}</dd></>}
-          {event.purpose && <><dt className="text-slate-400">Purpose</dt><dd>{event.purpose}</dd></>}
-          {event.reminder && event.reminder !== 'None' && <><dt className="text-slate-400">Reminder</dt><dd>{event.reminder}</dd></>}
-          {event.details && <><dt className="text-slate-400">Notes</dt><dd className="whitespace-pre-wrap">{event.details}</dd></>}
-        </dl>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {!awaiting && <button type="button" className="btn-ghost" onClick={onEdit}>Edit</button>}
-          {!awaiting && <button type="button" className="btn-ghost" onClick={onComplete}>{event.status === 'Completed' ? 'Reopen' : 'Mark done'}</button>}
-          {canLogMeeting(event.type) && !awaiting && (
-            <Link className="btn" to={`/meeting-logs?event=${event.id}`}>{event.logged ? 'Open meeting log' : 'Log in Meeting logs'}</Link>
+      <div className="flex min-h-[calc(100%-65px)] flex-col">
+        <div className="flex-1 space-y-5 px-5 py-5">
+          {(done || overdue || awaiting) && (
+            <div className={cx(
+              'rounded-2xl px-3.5 py-2.5 text-sm font-medium ring-1',
+              done && 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+              overdue && !done && 'bg-rose-50 text-rose-700 ring-rose-100',
+              awaiting && 'bg-amber-50 text-amber-800 ring-amber-100',
+            )}>
+              {done && 'This follow-up is complete.'}
+              {overdue && !done && 'This is overdue — reopen or reschedule it.'}
+              {awaiting && 'Waiting for Head of Sales to approve.'}
+            </div>
           )}
-          {(canManage || !awaiting) && <button type="button" className="btn-ghost !text-rose-600" onClick={onDelete}>Delete</button>}
+
+          <div>
+            <p className="text-xl font-semibold tracking-tight text-slate-900">{event.title}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">When</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-800">{dueLabel(event.dueDate)}</p>
+                <p className="text-xs text-slate-500">{event.dueTime ? formatClock(event.dueTime) : 'All day'}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Duration</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-800">{event.durationMinutes ? `${event.durationMinutes} min` : '—'}</p>
+                <p className="text-xs text-slate-500">{event.reminder && event.reminder !== 'None' ? event.reminder : 'No reminder'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className={cx('rounded-full px-2.5 py-1 font-medium ring-1', EVENT_TONE[event.type])}>{eventIcon(event.type)} {event.type}</span>
+            <span className={cx(
+              'rounded-full px-2.5 py-1 font-medium',
+              done ? 'bg-emerald-50 text-emerald-700' : awaiting ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600',
+            )}>{status}</span>
+            {overdue && !done && <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-600">Overdue</span>}
+            {event.conflict && <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-600">Conflict</span>}
+            {event.logged && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">Logged</span>}
+          </div>
+
+          {event.conflicts?.length > 0 && (
+            <Banner tone="warn">Overlaps {event.conflicts.map((item) => item.title).join(', ')}. Move one so the same person is not double-booked.</Banner>
+          )}
+
+          <div className="overflow-hidden rounded-2xl ring-1 ring-slate-100">
+            {event.leadName && (
+              <DetailRow label="Lead">
+                <Link className="font-medium text-blue-700 hover:underline" to={`/leads/${event.leadId}`}>{event.leadName}</Link>
+              </DetailRow>
+            )}
+            {event.dealName && (
+              <DetailRow label="Deal">
+                <Link className="font-medium text-blue-700 hover:underline" to={`/deals/${event.dealId}`}>{event.dealName}</Link>
+              </DetailRow>
+            )}
+            <DetailRow label="Owner">
+              <span className="inline-flex items-center gap-2">
+                <Avatar name={event.assigneeName} size="sm" />
+                <span className="font-medium text-slate-800">{event.assigneeName || 'Unassigned'}</span>
+              </span>
+            </DetailRow>
+            {event.attendeeNames?.length > 0 && <DetailRow label="Attendees">{event.attendeeNames.join(', ')}</DetailRow>}
+            {event.location && <DetailRow label="Location">{event.location}</DetailRow>}
+            {event.meetingLink && (
+              <DetailRow label="Link">
+                <a className="break-all font-medium text-blue-700" href={event.meetingLink} target="_blank" rel="noreferrer">{event.meetingLink}</a>
+              </DetailRow>
+            )}
+            {event.contactPerson && <DetailRow label="Contact">{event.contactPerson}</DetailRow>}
+            {event.purpose && <DetailRow label="Purpose">{event.purpose}</DetailRow>}
+          </div>
+
+          {event.details && (
+            <div className="rounded-2xl bg-amber-50/70 px-4 py-3 ring-1 ring-amber-100">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700/80">Notes</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{event.details}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 flex flex-wrap gap-2 border-t border-slate-100 bg-white px-5 py-4">
+          {!awaiting && <button type="button" className="btn-ghost !rounded-xl" onClick={onEdit}>Edit</button>}
+          {!awaiting && (
+            <button type="button" className={cx('btn-ghost !rounded-xl', done ? '' : '!bg-emerald-50 !text-emerald-700 !ring-emerald-100')} onClick={onComplete}>
+              {done ? 'Reopen' : 'Mark done'}
+            </button>
+          )}
+          {canLogMeeting(event.type) && !awaiting && (
+            <Link className="btn !rounded-xl" to={`/meeting-logs?event=${event.id}`}>{event.logged ? 'Open meeting log' : 'Log meeting'}</Link>
+          )}
+          {(canManage || !awaiting) && (
+            <button type="button" className="btn-ghost !rounded-xl !text-rose-600 ml-auto" onClick={onDelete}>Delete</button>
+          )}
         </div>
       </div>
     </Drawer>
+  );
+}
+
+function DetailRow({ label, children }) {
+  return (
+    <div className="grid grid-cols-[92px_1fr] items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <div className="text-sm text-slate-700">{children}</div>
+    </div>
   );
 }
