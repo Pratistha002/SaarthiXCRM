@@ -1,9 +1,14 @@
+# Memory: every container is capped so a small VPS never runs out of RAM (exit code 137 / OOM kill).
+# Default `docker compose up -d` runs ONE backend (~1.4 GB total).
+# On a VPS with 4 GB+ RAM, run three behind the gateway: `docker compose --profile scale up -d`.
 x-backend: &backend
   image: saarthixcrm-backend
   pull_policy: never
+  mem_limit: ${BACKEND_MEM_LIMIT:-512m}
   expose:
     - "8082"
   environment: &backend-env
+    JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65 -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
     MONGODB_URI: mongodb://mongo:27017/saarthix_crm
     SPRING_MAIL_HOST: mailpit
     SPRING_MAIL_PORT: 1025
@@ -18,12 +23,15 @@ x-backend: &backend
     interval: 10s
     timeout: 5s
     retries: 5
-    start_period: 60s
+    start_period: 90s
   restart: unless-stopped
 
 services:
   mongo:
     image: mongo:7
+    command: ["--wiredTigerCacheSizeGB", "${MONGO_CACHE_GB:-0.25}"]
+    mem_limit: ${MONGO_MEM_LIMIT:-768m}
+    restart: unless-stopped
     volumes:
       - saarthix_crm_data:/data/db
     healthcheck:
@@ -34,6 +42,8 @@ services:
 
   mailpit:
     image: axllent/mailpit
+    mem_limit: 64m
+    restart: unless-stopped
     ports:
       - "8025:8025"
 
@@ -53,18 +63,21 @@ services:
 
   backend-2:
     <<: *backend
+    profiles: ["scale"]
     depends_on:
       backend:
         condition: service_healthy
 
   backend-3:
     <<: *backend
+    profiles: ["scale"]
     depends_on:
       backend:
         condition: service_healthy
 
   frontend:
     build: ./frontend
+    mem_limit: 64m
     expose:
       - "80"
     depends_on:
@@ -73,6 +86,7 @@ services:
 
   gateway:
     image: nginx:1.27-alpine
+    mem_limit: 64m
     ports:
       - "5175:80"
     volumes:

@@ -1,5 +1,6 @@
 FROM gradle:8.7-jdk21 AS build
 WORKDIR /src
+ENV GRADLE_OPTS="-Xmx256m -Dorg.gradle.jvmargs=-Xmx512m -Dorg.gradle.workers.max=2"
 COPY build.gradle settings.gradle ./
 COPY src ./src
 RUN gradle bootJar --no-daemon
