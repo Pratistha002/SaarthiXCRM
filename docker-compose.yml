@@ -40,8 +40,10 @@ services:
     mem_limit: ${MONGO_MEM_LIMIT:-768m}
     restart: unless-stopped
 
+    # mongo:4.4 cannot read files written by mongo:7, so 4.4 uses its own volume.
+    # The previous mongo:7 data remains in the saarthixcrm_saarthix_crm_data volume.
     volumes:
-      - saarthix_crm_data:/data/db
+      - saarthix_crm_data_v4:/data/db
 
     healthcheck:
       test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
@@ -126,4 +128,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  saarthix_crm_data:
+  saarthix_crm_data_v4:
